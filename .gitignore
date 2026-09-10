@@ -1,0 +1,9 @@
+node_modules/
+dist/
+target/
+*.local
+.DS_Store
+coverage/
+src-tauri/gen/schemas
+packages/app-server-protocol/generated
+!packages/app-server-protocol/generated/.gitkeep

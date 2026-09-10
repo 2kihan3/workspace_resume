@@ -1,0 +1,18 @@
+{
+  "name": "job-search-workbench",
+  "private": true,
+  "version": "1.0.0",
+  "description": "macOS 优先的本地单用户求职工作台桌面应用",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @jsw/desktop dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "tauri": "pnpm --filter @jsw/desktop tauri"
+  }
+}

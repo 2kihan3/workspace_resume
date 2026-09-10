@@ -1,0 +1,34 @@
+/* builtin.classic —— 经典单栏排版 */
+:root {
+  --ink: #1a1a1a;
+  --muted: #555;
+  --rule: #d8d8d8;
+  --accent: #1d4ed8;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--ink);
+  font-size: 10.5pt;
+  line-height: 1.55;
+}
+.resume-body h1 { font-size: 20pt; margin: 0 0 4pt; }
+.resume-body h2 {
+  font-size: 12.5pt;
+  margin: 14pt 0 6pt;
+  padding-bottom: 3pt;
+  border-bottom: 1.5pt solid var(--ink);
+}
+.resume-body h3 { font-size: 11pt; margin: 8pt 0 2pt; }
+.resume-body p { margin: 3pt 0; }
+.resume-body ul { margin: 3pt 0; padding-left: 14pt; }
+.resume-body li { margin: 1.5pt 0; }
+.resume-body a { color: var(--accent); text-decoration: none; }
+.resume-body table { border-collapse: collapse; width: 100%; }
+.resume-body th, .resume-body td { border: 0.75pt solid var(--rule); padding: 3pt 5pt; text-align: left; }
+.resume-body strong { font-weight: 600; }
+.resume-body hr { border: none; border-top: 0.75pt solid var(--rule); margin: 8pt 0; }
+.resume-body blockquote { margin: 4pt 0; padding-left: 8pt; border-left: 2pt solid var(--rule); color: var(--muted); }
+.resume-body code { font-family: ui-monospace, Menlo, monospace; font-size: 9.5pt; }
+.resume-body img { max-width: 100%; }

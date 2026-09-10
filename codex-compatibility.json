@@ -1,0 +1,7 @@
+{
+  "testedVersion": "0.144.1",
+  "minimumVersion": "0.144.1",
+  "protocolHash": "sha256:fill-on-protocol-regeneration",
+  "generatedAt": "2026-09-10",
+  "notes": "协议类型由 `codex app-server generate-ts` 在 CI 中以 testedVersion 生成，禁止手写 wire type。"
+}

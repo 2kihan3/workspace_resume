@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin.classic",
+  "name": "经典简历",
+  "author": "求职工作台",
+  "version": "1.0.0",
+  "entry": "template.html",
+  "style": "style.css",
+  "supportedLocales": ["zh-CN", "en-US"],
+  "page": { "size": "A4", "marginMm": [14, 14, 14, 14] }
+}

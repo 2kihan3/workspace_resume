@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CompanySourceV1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["title", "url", "publisher", "accessedAt", "supportingClaims"],
+    "properties": {
+      "title": { "type": "string" },
+      "url": { "type": "string", "format": "uri" },
+      "publisher": { "type": "string" },
+      "accessedAt": { "type": "string", "format": "date-time" },
+      "supportingClaims": { "type": "array", "items": { "type": "string" } }
+    }
+  }
+}

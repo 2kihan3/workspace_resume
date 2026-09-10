@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="{{document.locale}}">
+<head>
+  <meta charset="utf-8" />
+  <title>{{document.title}}</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <article class="resume">
+    <header class="resume-head">{{sections.basic.html}}</header>
+    <div class="resume-grid">
+      <section class="col-main">
+        {{sections.experience.html}}
+        {{sections.projects.html}}
+      </section>
+      <aside class="col-side">
+        {{sections.education.html}}
+        {{sections.skills.html}}
+      </aside>
+    </div>
+  </article>
+</body>
+</html>

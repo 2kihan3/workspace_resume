@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JDAnalysisV1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "roleTitle", "summary", "responsibilities", "mustHave",
+    "niceToHave", "keywords", "seniority", "location", "salary",
+    "candidateRisks", "questionsToClarify"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "roleTitle": { "type": "string" },
+    "summary": { "type": "string" },
+    "responsibilities": { "type": "array", "items": { "type": "string" } },
+    "mustHave": { "type": "array", "items": { "type": "string" } },
+    "niceToHave": { "type": "array", "items": { "type": "string" } },
+    "keywords": { "type": "array", "items": { "type": "string" } },
+    "seniority": { "type": ["string", "null"] },
+    "location": { "type": ["string", "null"] },
+    "salary": { "type": ["string", "null"] },
+    "candidateRisks": { "type": "array", "items": { "type": "string" } },
+    "questionsToClarify": { "type": "array", "items": { "type": "string" } }
+  }
+}

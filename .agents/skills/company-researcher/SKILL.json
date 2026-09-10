@@ -1,0 +1,10 @@
+{
+  "name": "company-researcher",
+  "display_name": "公司调研器",
+  "version": "1.0.0",
+  "author": "求职工作台",
+  "description": "基于公开网络信息撰写公司调研报告与来源清单",
+  "tools": ["web_search"],
+  "network": true,
+  "outputs": ["outputs/company-research.md", "outputs/company-sources.json"]
+}
