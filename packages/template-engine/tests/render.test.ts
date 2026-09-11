@@ -36,6 +36,30 @@ describe("Handlebars strict 模板渲染", () => {
     expect(r.html).toContain("正文");
   });
 
+  it("HTML 插值不被转义（bodyHtml/sections 原样输出排版标签）", () => {
+    const r = renderTemplate({
+      manifest,
+      templateHtml: "<main>{{resume.bodyHtml}}{{sections.experience.html}}</main>",
+      context: ctx,
+    });
+    expect(r.ok).toBe(true);
+    // 核心回归：模板协议 §8.2 的双花括号写法必须输出未转义的 HTML
+    expect(r.html).toContain("<p>正文</p>");
+    expect(r.html).toContain("<h2>工作经历</h2>");
+    expect(r.html).not.toContain("&lt;p&gt;");
+  });
+
+  it("document.title 中的 HTML 被转义（防注入）", () => {
+    const r = renderTemplate({
+      manifest,
+      templateHtml: "<h1>{{document.title}}</h1>",
+      context: { ...ctx, document: { ...ctx.document, title: '<script>x</script>' } },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.html).toContain("&lt;script&gt;");
+    expect(r.html).not.toContain("<script>");
+  });
+
   it("缺失变量报错（strict mode）", () => {
     const r = renderTemplate({
       manifest,

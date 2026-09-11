@@ -38,20 +38,41 @@ export interface TemplateRenderResult {
  * 使用 Handlebars strict mode 渲染模板（spec §8.2）。
  * 不注册任何自定义 helper；缺失字段即失败。
  */
+/** HTML 转义（防注入：唯一用户可控字段 document.title 用）。 */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function renderTemplate(input: TemplateRenderInput): TemplateRenderResult {
   const errors: string[] = [];
   let template: HandlebarsTemplateDelegate;
   try {
+    // noEscape：模板上下文的 bodyHtml / sections.*.html 均为已 sanitize 的
+    // HTML 片段，必须原样插入（双花括号 `{{resume.bodyHtml}}` 是 spec §8.2
+    // 定义的模板协议写法）。用户可控的 document.title 在下方先行转义。
     template = Handlebars.compile(input.templateHtml, {
       strict: true,
-      noEscape: false,
+      noEscape: true,
       preventIndent: true,
     });
   } catch (e) {
     return { ok: false, html: null, errors: [`模板编译失败：${(e as Error).message}`] };
   }
   try {
-    const html = template(input.context);
+    const ctx: TemplateContextV1 = {
+      ...input.context,
+      document: {
+        ...input.context.document,
+        title: escapeHtml(input.context.document.title),
+        locale: escapeHtml(input.context.document.locale),
+      },
+    };
+    const html = template(ctx);
     return { ok: true, html, errors };
   } catch (e) {
     errors.push(`模板渲染失败：${(e as Error).message}`);

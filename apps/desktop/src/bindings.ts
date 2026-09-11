@@ -181,6 +181,14 @@ async createResumeVersion(id: string, title: string) : Promise<Result<Resume, Se
     else return { status: "error", error: e  as any };
 }
 },
+async duplicateResume(id: string) : Promise<Result<Resume, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("duplicate_resume", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async listResumes() : Promise<Result<Resume[], SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("list_resumes") };
@@ -235,6 +243,28 @@ async importTemplateZip(zipPath: string) : Promise<Result<Template, SerializedEr
 async readTemplateAssets(id: string) : Promise<Result<TemplateAssets, SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("read_template_assets", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 生成模板静态预览图（spec §8.3）：前端渲染 mock HTML，Rust 用 WKWebView 快照为 PNG。
+ */
+async saveTemplatePreview(templateId: string, renderedHtml: string) : Promise<Result<string, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_template_preview", { templateId, renderedHtml }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 读取模板静态预览图（base64 data URL）；未生成时返回 null。
+ */
+async readTemplatePreview(templateId: string) : Promise<Result<string | null, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_template_preview", { templateId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -427,7 +457,7 @@ export type SaveResumeInput = { id: string; title: string | null; markdown: stri
 export type SerializedError = { code: string; message: string }
 export type SkillInfo = { name: string; description: string; path: string | null; enabled: boolean; error: string | null }
 export type Template = { id: string; name: string; origin: string; version: string; manifest_path: string; preview_path: string | null; enabled: boolean; created_at: string; updated_at: string }
-export type TemplateAssets = { template_html: string; style_css: string }
+export type TemplateAssets = { template_html: string; style_css: string; manifest_json: string }
 export type TransitionJobInput = { to_status: JobStatus; reason: string | null }
 export type UpdateJobInput = { company_name: string | null; role_title: string | null; source_url: string | null; location: string | null; salary_text: string | null }
 export type UpsertInterviewInput = { id: string | null; sequence: number | null; name: string; status: string; scheduled_at: string | null; format: string | null; interviewer: string | null; notes: string; result: string | null }
