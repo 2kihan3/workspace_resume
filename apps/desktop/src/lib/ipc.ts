@@ -118,6 +118,7 @@ export interface RunOutput {
 export interface TemplateAssets {
   template_html: string;
   style_css: string;
+  manifest_json: string;
 }
 
 export const api = {
@@ -157,6 +158,7 @@ export const api = {
   saveResume: (input: SaveResumeInput) => invoke<Resume>("save_resume", { input }),
   createResumeVersion: (id: string, title: string) =>
     invoke<Resume>("create_resume_version", { id, title }),
+  duplicateResume: (id: string) => invoke<Resume>("duplicate_resume", { id }),
   listResumes: () => invoke<Resume[]>("list_resumes"),
   deleteResume: (id: string) => invoke<void>("delete_resume", { id }),
   exportPdfRendered: (args: {

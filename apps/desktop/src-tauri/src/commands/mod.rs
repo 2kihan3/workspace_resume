@@ -179,6 +179,12 @@ pub async fn save_resume(state: State<'_, AppState>, input: SaveResumeInput) -> 
 
 #[tauri::command]
 #[specta::specta]
+pub async fn duplicate_resume(state: State<'_, AppState>, id: String) -> Result<Resume, SerializedError> {
+    Ok(resume_service(&state).duplicate_resume(&id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn create_resume_version(state: State<'_, AppState>, id: String, title: String) -> Result<Resume, SerializedError> {
     Ok(resume_service(&state).create_version(&id, &title).await?)
 }
@@ -265,13 +271,14 @@ pub async fn import_template_zip(state: State<'_, AppState>, zip_path: String) -
 pub struct TemplateAssets {
     pub template_html: String,
     pub style_css: String,
+    pub manifest_json: String,
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn read_template_assets(state: State<'_, AppState>, id: String) -> Result<TemplateAssets, SerializedError> {
-    let (template_html, style_css) = template_service(&state).read_template_assets(&id)?;
-    Ok(TemplateAssets { template_html, style_css })
+    let (template_html, style_css, manifest_json) = template_service(&state).read_template_assets(&id)?;
+    Ok(TemplateAssets { template_html, style_css, manifest_json })
 }
 
 // ---- AI ----

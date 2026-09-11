@@ -26,6 +26,8 @@ pub struct TemplateManifest {
     pub schema_version: i64,
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
     pub author: String,
     pub version: String,
     pub entry: String,
@@ -237,12 +239,13 @@ impl TemplateService {
         Ok(())
     }
 
-    /// 读取模板的 entry HTML 与 CSS（渲染时由前端 template-engine 使用）。
-    pub fn read_template_assets(&self, id: &str) -> AppResult<(String, String)> {
+    /// 读取模板的 entry HTML、CSS 与 manifest（渲染与详情展示用）。
+    pub fn read_template_assets(&self, id: &str) -> AppResult<(String, String, String)> {
         let dir = self.layout.template_dir(id);
         let html = std::fs::read_to_string(dir.join("template.html"))?;
         let css = std::fs::read_to_string(dir.join("style.css"))?;
-        Ok((html, css))
+        let manifest = std::fs::read_to_string(dir.join("manifest.json"))?;
+        Ok((html, css, manifest))
     }
 }
 

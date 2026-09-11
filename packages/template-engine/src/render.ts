@@ -9,6 +9,7 @@ export const TemplateManifestSchema = z.object({
     .string()
     .regex(/^[a-z0-9_-]+(\.[a-z0-9_-]+)+$/, "模板 id 必须形如 author.template-name"),
   name: z.string().min(1),
+  description: z.string().optional(),
   author: z.string().min(1),
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
   entry: z.string().refine((s) => s === "template.html", "entry 必须是 template.html"),

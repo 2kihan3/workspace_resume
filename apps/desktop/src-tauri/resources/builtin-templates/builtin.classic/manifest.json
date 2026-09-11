@@ -6,6 +6,18 @@
   "version": "1.0.0",
   "entry": "template.html",
   "style": "style.css",
-  "supportedLocales": ["zh-CN", "en-US"],
-  "page": { "size": "A4", "marginMm": [14, 14, 14, 14] }
+  "supportedLocales": [
+    "zh-CN",
+    "en-US"
+  ],
+  "page": {
+    "size": "A4",
+    "marginMm": [
+      14,
+      14,
+      14,
+      14
+    ]
+  },
+  "description": "传统单栏排版，层次清晰，适合大多数求职场景"
 }

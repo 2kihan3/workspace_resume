@@ -206,6 +206,35 @@ impl ResumeService {
         Self::fetch(&self.db, &new_id).await
     }
 
+    /// 复制简历：复制文件与新行，不设 parent；岗位版保留岗位关联。
+    pub async fn duplicate_resume(&self, id: &str) -> AppResult<Resume> {
+        let source = Self::fetch(&self.db, id).await?;
+        let source_abs = self.layout.resolve(&source.markdown_path)?;
+        let content = std::fs::read_to_string(&source_abs)?;
+        let new_id = new_uuid_v7();
+        let now = now_rfc3339();
+        let rel = format!("workspace/resumes/{new_id}/resume.md");
+        let abs = self.layout.resolve(&rel)?;
+        atomic_write(&abs, content.as_bytes())?;
+        let title = format!("{} 副本", source.title);
+        sqlx::query(
+            "INSERT INTO resumes (id, title, kind, markdown_path, parent_resume_id, job_id, template_id, content_sha256, schema_version, created_at, updated_at)
+             VALUES (?, ?, ?, ?, NULL, ?, ?, ?, 1, ?, ?)",
+        )
+        .bind(&new_id)
+        .bind(&title)
+        .bind(source.kind.as_str())
+        .bind(&rel)
+        .bind(&source.job_id)
+        .bind(&source.template_id)
+        .bind(&source.content_sha256)
+        .bind(&now)
+        .bind(&now)
+        .execute(&*self.db)
+        .await?;
+        Self::fetch(&self.db, &new_id).await
+    }
+
     /// AI 输出入库：创建 tailored 简历（spec §7.3），由 AI Run 校验后调用。
     pub async fn create_tailored(
         &self,

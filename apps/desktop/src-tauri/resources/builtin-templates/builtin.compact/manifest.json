@@ -6,6 +6,18 @@
   "version": "1.0.0",
   "entry": "template.html",
   "style": "style.css",
-  "supportedLocales": ["zh-CN", "en-US"],
-  "page": { "size": "A4", "marginMm": [10, 10, 10, 10] }
+  "supportedLocales": [
+    "zh-CN",
+    "en-US"
+  ],
+  "page": {
+    "size": "A4",
+    "marginMm": [
+      10,
+      10,
+      10,
+      10
+    ]
+  },
+  "description": "紧凑双栏布局，信息密度高，适合经历丰富的候选人"
 }

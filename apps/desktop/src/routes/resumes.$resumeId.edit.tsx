@@ -8,7 +8,7 @@ import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
 import { api } from "../lib/constants";
 import { parseResumeDocument, renderSectionHtml, splitSections } from "@jsw/markdown-resume";
-import { renderTemplate, pageCss, type TemplateManifest } from "@jsw/template-engine";
+import { renderTemplate, pageCss, TemplateManifestSchema } from "@jsw/template-engine";
 import { renderResumeForTemplate } from "@jsw/markdown-resume";
 
 export const Route = createFileRoute("/resumes/$resumeId/edit")({ component: ResumeEditor });
@@ -99,8 +99,9 @@ function ResumeEditor() {
     mutationFn: async () => {
       if (!parsed?.ok || !assets.data || !content.data) throw new Error("当前内容无效或模板未加载");
       const rendered = renderResumeForTemplate(markdown!);
-      const manifestRaw = await fetchTemplateManifest(content.data.resume.template_id);
-      const manifest = JSON.parse(manifestRaw) as TemplateManifest;
+      const manifest = TemplateManifestSchema.parse(
+        JSON.parse(assets.data.manifest_json),
+      );
       const result = renderTemplate({
         manifest,
         templateHtml: assets.data.template_html,
@@ -124,19 +125,6 @@ function ResumeEditor() {
     onSuccess: (r) => toast.success(`PDF 已导出（${r.page_count} 页）`),
     onError: (e) => toast.error(`导出失败：${(e as Error).message}`),
   });
-
-  async function fetchTemplateManifest(templateId: string): Promise<string> {
-    // 通过 read_template_assets 之外的通道读取 manifest：借用 list_templates + manifest_path
-    // 首版模板 manifest 均由应用内置，直接从模板资产接口获取 page 配置不可行，
-    // 这里从模板目录的 manifest 相对路径读取由 Rust 提供（read_template_assets 只返回 html/css）。
-    // 简化：默认 A4 / 12mm 边距，模板 manifest 的 page 字段在导入时已校验。
-    void templateId;
-    return JSON.stringify({
-      schemaVersion: 1, id: templateId, name: "", author: "", version: "1.0.0",
-      entry: "template.html", style: "style.css", supportedLocales: ["zh-CN"],
-      page: { size: "A4", marginMm: [12, 12, 12, 12] },
-    });
-  }
 
   // 预览 HTML：最后一次有效 AST
   const previewHtml = useMemo(() => {

@@ -358,6 +358,18 @@ async appInfo() : Promise<Result<AppInfoResult, SerializedError>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * 导入预览：读取用户通过原生对话框选择的 Markdown 源文件内容。
+ * UI 不直接访问文件系统，统一走此命令（spec §17）。
+ */
+async readImportSource(path: string) : Promise<Result<string, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_import_source", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async runRecoveryScan() : Promise<Result<[number, number], SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("run_recovery_scan") };

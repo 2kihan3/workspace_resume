@@ -37,6 +37,7 @@ pub fn run() {
         commands::read_resume,
         commands::save_resume,
         commands::create_resume_version,
+        commands::duplicate_resume,
         commands::list_resumes,
         commands::delete_resume,
         commands::export_pdf_rendered,

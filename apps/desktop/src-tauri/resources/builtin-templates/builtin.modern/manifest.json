@@ -6,6 +6,18 @@
   "version": "1.0.0",
   "entry": "template.html",
   "style": "style.css",
-  "supportedLocales": ["zh-CN", "en-US"],
-  "page": { "size": "A4", "marginMm": [16, 16, 16, 16] }
+  "supportedLocales": [
+    "zh-CN",
+    "en-US"
+  ],
+  "page": {
+    "size": "A4",
+    "marginMm": [
+      16,
+      16,
+      16,
+      16
+    ]
+  },
+  "description": "现代简洁风格，弱化边框强调留白，适合设计/互联网岗位"
 }
