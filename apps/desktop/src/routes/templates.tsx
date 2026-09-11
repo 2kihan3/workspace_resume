@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/constants";
@@ -7,10 +7,12 @@ import { TemplateThumb } from "../components/TemplateThumb";
 import { TemplateManifestSchema } from "@jsw/template-engine";
 import type { Template } from "../lib/types";
 
+
 export const Route = createFileRoute("/templates")({ component: TemplatesPage });
 
 function TemplatesPage() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const templates = useQuery({ queryKey: ["templates"], queryFn: api.listTemplates });
 
   // 每个模板的 manifest（描述等元信息）
@@ -80,6 +82,7 @@ function TemplatesPage() {
             key={t.id}
             template={t}
             description={manifestOf(i)?.description ?? null}
+            onOpen={() => navigate({ to: "/templates/$templateId", params: { templateId: t.id } })}
             onToggle={(enabled) => toggle.mutate({ id: t.id, enabled })}
           />
         ))}
@@ -94,10 +97,12 @@ function TemplatesPage() {
 function TemplateCard({
   template,
   description,
+  onOpen,
   onToggle,
 }: {
   template: Template;
   description: string | null;
+  onOpen: () => void;
   onToggle: (enabled: boolean) => void;
 }) {
   return (
@@ -108,7 +113,9 @@ function TemplateCard({
           : "border-dashed border-zinc-300 opacity-70 dark:border-zinc-700"
       }`}
     >
-      <TemplateThumb templateId={template.id} />
+      <button onClick={onOpen} aria-label={`查看模板 ${template.name} 详情`} className="block w-full text-left">
+        <TemplateThumb templateId={template.id} />
+      </button>
       <div className="border-t border-zinc-100 p-3 dark:border-zinc-800">
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium">{template.name}</span>

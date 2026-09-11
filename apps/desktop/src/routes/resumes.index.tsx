@@ -7,6 +7,7 @@ import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/constants";
 import { previewImport } from "@jsw/markdown-resume";
 import { ResumeThumb } from "../components/ResumeThumb";
+import { CreateResumeModal } from "../components/CreateResumeModal";
 import type { Resume } from "../lib/types";
 
 export const Route = createFileRoute("/resumes/")({ component: ResumesPage });
@@ -49,6 +50,7 @@ function ResumesPage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [preview, setPreview] = useState<ImportPreviewState | null>(null);
   const [deleting, setDeleting] = useState<Resume | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const jobMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -131,12 +133,20 @@ function ResumesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">简历库</h1>
-        <button
-          onClick={pickAndPreview}
-          className="flex min-h-[44px] items-center gap-2 rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          <Plus size={16} aria-hidden /> 导入 Markdown 简历
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setCreating(true)}
+            className="flex min-h-[44px] items-center gap-2 rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            <Plus size={16} aria-hidden /> 新建简历
+          </button>
+          <button
+            onClick={pickAndPreview}
+            className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700"
+          >
+            导入 Markdown
+          </button>
+        </div>
       </div>
 
       <div role="tablist" aria-label="简历类型过滤" className="flex gap-1">
@@ -247,6 +257,8 @@ function ResumesPage() {
       {(resumes.data?.length ?? 0) > 0 && filtered.length === 0 && (
         <div className="py-12 text-center text-zinc-500">该分类下暂无简历。</div>
       )}
+
+      <CreateResumeModal open={creating} onClose={() => setCreating(false)} />
 
       {deleting && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
