@@ -22,3 +22,4 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   passed: "已通过",
   rejected: "未通过",
 };
+export type { LayoutConfig, LayoutBlock } from "./ipc";

@@ -244,7 +244,7 @@ function ResumesPage() {
                 className="relative block"
               >
                 {content ? (
-                  <ResumeThumb markdown={content.markdown} templateId={r.template_id} title={r.title} />
+                  <ResumeThumb markdown={content.markdown} templateId={r.template_id} title={r.title} resumeId={r.id} />
                 ) : (
                   <div className="w-full animate-pulse bg-muted" style={{ aspectRatio: "210 / 297" }} />
                 )}

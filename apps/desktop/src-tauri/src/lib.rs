@@ -38,6 +38,8 @@ pub fn run() {
         commands::save_resume,
         commands::create_resume_version,
         commands::duplicate_resume,
+        commands::get_layout,
+        commands::save_layout,
         commands::list_resumes,
         commands::delete_resume,
         commands::export_pdf_rendered,

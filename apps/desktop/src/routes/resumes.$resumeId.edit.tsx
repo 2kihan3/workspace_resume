@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, useBlocker } from "@tanstack/react-router";
+import { Link, createFileRoute, useBlocker } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { EditorState } from "@codemirror/state";
@@ -171,6 +171,13 @@ function ResumeEditor() {
             ))}
           </select>
         </label>
+        <Link
+          to="/resumes/$resumeId/layout"
+          params={{ resumeId }}
+          className="flex h-11 items-center rounded-md border border-input bg-card px-4 text-sm font-medium transition-colors hover:bg-muted"
+        >
+          排版
+        </Link>
         <button onClick={() => save.mutate()} disabled={save.isPending || !(parsed?.ok)}
           className="h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50">
           保存

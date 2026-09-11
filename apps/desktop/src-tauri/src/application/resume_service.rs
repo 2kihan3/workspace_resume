@@ -208,6 +208,40 @@ impl ResumeService {
         Self::fetch(&self.db, &new_id).await
     }
 
+    /// 读取排版配置；未配置过返回 None（前端按默认规则生成后保存）。
+    pub async fn get_layout(&self, id: &str) -> AppResult<Option<crate::domain::layout::LayoutConfig>> {
+        let row = sqlx::query("SELECT layout_config FROM resumes WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&*self.db)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("简历 {id} 不存在")))?;
+        let raw: Option<String> = row.get("layout_config");
+        match raw {
+            None => Ok(None),
+            Some(json) => Ok(Some(
+                serde_json::from_str(&json).map_err(|e| AppError::Validation(format!("排版配置损坏: {e}")))?,
+            )),
+        }
+    }
+
+    /// 保存排版配置（校验后整体覆盖）。
+    pub async fn save_layout(
+        &self,
+        id: &str,
+        config: &crate::domain::layout::LayoutConfig,
+    ) -> AppResult<()> {
+        Self::fetch(&self.db, id).await?;
+        config.validate().map_err(AppError::Validation)?;
+        let json = serde_json::to_string(config)?;
+        sqlx::query("UPDATE resumes SET layout_config = ?, updated_at = ? WHERE id = ?")
+            .bind(&json)
+            .bind(now_rfc3339())
+            .bind(id)
+            .execute(&*self.db)
+            .await?;
+        Ok(())
+    }
+
     /// 复制简历：复制文件与新行，不设 parent；岗位版保留岗位关联。
     pub async fn duplicate_resume(&self, id: &str) -> AppResult<Resume> {
         let source = Self::fetch(&self.db, id).await?;

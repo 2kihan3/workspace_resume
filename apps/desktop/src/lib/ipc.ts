@@ -110,6 +110,24 @@ export interface LoginStartResult {
   user_code: string | null;
 }
 
+export interface LayoutBlock {
+  id: string; type: "section" | "text"; sectionId: string | null; markdown: string | null;
+  width: 12 | 8 | 6 | 4; hidden: boolean; card: boolean; tint: string | null;
+}
+
+export interface LayoutConfig {
+  page: {
+    marginTop: number; marginRight: number; marginBottom: number; marginLeft: number;
+    headerEnabled: boolean; headerHeightMm: number; headerMarkdown: string | null;
+    footerEnabled: boolean; footerHeightMm: number; footerPageNumbers: boolean; footerMarkdown: string | null;
+  };
+  blocks: Array<{
+    id: string; type: "section" | "text"; sectionId: string | null; markdown: string | null;
+    width: 12 | 8 | 6 | 4; hidden: boolean; card: boolean; tint: string | null;
+  }>;
+  theme: { primary: string; font: "sans" | "serif"; density: "compact" | "normal" | "airy" };
+}
+
 export interface RunOutput {
   name: string;
   content: string;
@@ -159,6 +177,9 @@ export const api = {
   createResumeVersion: (id: string, title: string) =>
     invoke<Resume>("create_resume_version", { id, title }),
   duplicateResume: (id: string) => invoke<Resume>("duplicate_resume", { id }),
+  getLayout: (id: string) => invoke<LayoutConfig | null>("get_layout", { id }),
+  saveLayout: (id: string, config: LayoutConfig) =>
+    invoke<void>("save_layout", { id, config }),
   listResumes: () => invoke<Resume[]>("list_resumes"),
   deleteResume: (id: string) => invoke<void>("delete_resume", { id }),
   exportPdfRendered: (args: {

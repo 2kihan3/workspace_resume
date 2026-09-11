@@ -179,6 +179,18 @@ pub async fn save_resume(state: State<'_, AppState>, input: SaveResumeInput) -> 
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_layout(state: State<'_, AppState>, id: String) -> Result<Option<crate::domain::layout::LayoutConfig>, SerializedError> {
+    Ok(resume_service(&state).get_layout(&id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn save_layout(state: State<'_, AppState>, id: String, config: crate::domain::layout::LayoutConfig) -> Result<(), SerializedError> {
+    Ok(resume_service(&state).save_layout(&id, &config).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn duplicate_resume(state: State<'_, AppState>, id: String) -> Result<Resume, SerializedError> {
     Ok(resume_service(&state).duplicate_resume(&id).await?)
 }

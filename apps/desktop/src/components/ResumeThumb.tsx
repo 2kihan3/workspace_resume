@@ -3,24 +3,38 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/constants";
 import { inlineTemplateCss } from "../lib/mock-resume";
 import { renderTemplate, TemplateManifestSchema } from "@jsw/template-engine";
-import { renderResumeForTemplate } from "@jsw/markdown-resume";
+import { renderResumeForTemplate, renderLayoutCanvas } from "@jsw/markdown-resume";
 import { A4Preview } from "./A4Preview";
 
 /**
  * 简历卡片缩略图：按简历自身 template_id 套模板渲染（A4 等比缩放）。
  * 文档无效或模板缺失时降级为纯 Markdown 渲染（不套模板）。
  */
-export function ResumeThumb({ markdown, templateId, title }: {
+export function ResumeThumb({ markdown, templateId, title, resumeId }: {
   markdown: string;
   templateId: string;
   title: string;
+  resumeId?: string;
 }) {
+  const layout = useQuery({
+    queryKey: ["layout", resumeId],
+    queryFn: () => api.getLayout(resumeId!),
+    enabled: !!resumeId,
+    staleTime: Infinity,
+    retry: false,
+  });
   const assets = useQuery({
     queryKey: ["template-assets", templateId],
     queryFn: () => api.readTemplateAssets(templateId),
     staleTime: Infinity,
     retry: false,
   });
+
+  const layoutRender = useMemo(() => {
+    if (!layout.data || !markdown) return null;
+    const r = renderLayoutCanvas(markdown, layout.data);
+    return r.ok && r.content && r.css ? r : null;
+  }, [layout.data, markdown]);
 
   const html = useMemo(() => {
     const rendered = renderResumeForTemplate(markdown);
@@ -64,6 +78,26 @@ export function ResumeThumb({ markdown, templateId, title }: {
     </style></head><body>${rendered.bodyHtml}</body></html>`;
   }, [markdown, assets.data, title]);
 
+  if (layoutRender) {
+    return (
+      <div className="relative w-full overflow-hidden bg-white" style={{ aspectRatio: "210 / 297" }}>
+        <div style={{ width: 794, transformOrigin: "top left", transform: "scale(var(--thumb-scale, 0.3))" }}>
+          <div className="jsw-canvas" style={{ width: 794 }}>
+            <style>{layoutRender.css}</style>
+            <div
+              ref={(el) => {
+                if (el?.parentElement?.parentElement) {
+                  const w = el.parentElement.parentElement.clientWidth;
+                  el.parentElement.parentElement.style.setProperty("--thumb-scale", String(w / 794));
+                }
+              }}
+              dangerouslySetInnerHTML={{ __html: layoutRender.content || "" }}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!html) {
     return (
       <div
