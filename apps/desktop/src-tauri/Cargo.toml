@@ -34,6 +34,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
+base64 = "0.22"
 regex = { workspace = true }
 zip = { workspace = true }
 tempfile = { workspace = true }
@@ -42,7 +43,8 @@ libc = { workspace = true }
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSURL", "NSError", "NSData", "NSString", "NSGeometry", "NSNotification"] }
-objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKWebViewConfiguration", "WKPDFConfiguration", "WKNavigation", "WKNavigationDelegate", "WKFrameInfo"] }
+objc2-web-kit = { version = "0.3", features = ["WKWebView", "WKWebViewConfiguration", "WKPDFConfiguration", "WKSnapshotConfiguration", "WKNavigation", "WKNavigationDelegate", "WKFrameInfo"] }
+objc2-app-kit = { version = "0.3", features = ["NSImage", "NSBitmapImageRep"] }
 block2 = "0.6"
 
 [dev-dependencies]

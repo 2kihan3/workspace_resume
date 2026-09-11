@@ -1,10 +1,12 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { toast } from "sonner";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/constants";
 import { TemplateThumb } from "../components/TemplateThumb";
 import { TemplateManifestSchema } from "@jsw/template-engine";
+import { generateTemplatePreview, previewAttempted } from "../lib/template-preview";
 import type { Template } from "../lib/types";
 
 
@@ -47,6 +49,17 @@ function TemplatesPage() {
     mutationFn: (args: { id: string; enabled: boolean }) => api.setTemplateEnabled(args.id, args.enabled),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
   });
+
+  // 为缺少静态预览图的模板自动生成（每次会话每模板至多一次，失败降级实时渲染）
+  useEffect(() => {
+    if (!templates.data) return;
+    for (const t of templates.data) {
+      if (t.preview_path || previewAttempted(t.id)) continue;
+      generateTemplatePreview(t.id)
+        .then(() => qc.invalidateQueries({ queryKey: ["templates"] }))
+        .catch(() => {/* 静态图失败时保持实时渲染降级 */});
+    }
+  }, [templates.data, qc]);
 
   const pickAndImport = async () => {
     const path = await open({

@@ -45,6 +45,8 @@ pub fn run() {
         commands::set_template_enabled,
         commands::import_template_zip,
         commands::read_template_assets,
+        commands::save_template_preview,
+        commands::read_template_preview,
         commands::read_ai_status,
         commands::start_app_server,
         commands::start_login,

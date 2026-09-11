@@ -5,6 +5,7 @@ import { api } from "../lib/constants";
 import { TemplateThumb } from "../components/TemplateThumb";
 import { CreateResumeModal } from "../components/CreateResumeModal";
 import { TemplateManifestSchema } from "@jsw/template-engine";
+import { useGenerateTemplatePreview } from "../lib/template-preview";
 import { useState } from "react";
 
 export const Route = createFileRoute("/templates/$templateId")({
@@ -32,6 +33,9 @@ function TemplateDetail() {
         }
       })()
     : null;
+
+  const [regenerating, setRegenerating] = useState(false);
+  const regeneratePreview = useGenerateTemplatePreview();
 
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api.setTemplateEnabled(templateId, enabled),
@@ -103,6 +107,23 @@ function TemplateDetail() {
               className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700"
             >
               {template.enabled ? "停用模板" : "启用模板"}
+            </button>
+            <button
+              onClick={async () => {
+                setRegenerating(true);
+                try {
+                  await regeneratePreview(templateId);
+                  toast.success("预览图已更新");
+                } catch (e) {
+                  toast.error(`预览图生成失败：${(e as Error).message}`);
+                } finally {
+                  setRegenerating(false);
+                }
+              }}
+              disabled={regenerating}
+              className="min-h-[44px] rounded-md border border-zinc-300 px-4 disabled:opacity-50 dark:border-zinc-700"
+            >
+              {regenerating ? "生成中…" : "重新生成预览图"}
             </button>
             {!template.enabled && (
               <p className="text-xs text-amber-600">已停用的模板不能用于新建简历。</p>

@@ -6,18 +6,25 @@ import { renderTemplate, TemplateManifestSchema } from "@jsw/template-engine";
 import { A4Preview } from "./A4Preview";
 
 /**
- * 模板缩略图：示例简历数据 + 模板引擎渲染，A4 等比缩放。
- * 模板资产缺失/渲染失败时降级为占位样式。
+ * 模板缩略图：优先使用静态预览图（spec §8.3，由快照生成），
+ * 未生成时降级为示例数据实时渲染（iframe srcdoc，CSS 内联）。
  */
 export function TemplateThumb({ templateId }: { templateId: string }) {
+  const preview = useQuery({
+    queryKey: ["template-preview", templateId],
+    queryFn: () => api.readTemplatePreview(templateId),
+    staleTime: Infinity,
+    retry: false,
+  });
   const assets = useQuery({
     queryKey: ["template-assets", templateId],
     queryFn: () => api.readTemplateAssets(templateId),
     staleTime: Infinity,
+    retry: false,
   });
 
   const html = useMemo(() => {
-    if (!assets.data) return null;
+    if (!assets.data || preview.data) return null;
     try {
       const manifest = TemplateManifestSchema.parse(
         JSON.parse(assets.data.manifest_json),
@@ -31,9 +38,19 @@ export function TemplateThumb({ templateId }: { templateId: string }) {
     } catch {
       return null;
     }
-  }, [assets.data]);
+  }, [assets.data, preview.data]);
 
-  if (assets.isLoading) {
+  if (preview.data) {
+    return (
+      <img
+        src={preview.data}
+        alt={`模板 ${templateId} 预览`}
+        className="w-full bg-white object-cover"
+        style={{ aspectRatio: "210 / 297" }}
+      />
+    );
+  }
+  if (assets.isLoading || (preview.isLoading && !assets.data)) {
     return (
       <div className="w-full animate-pulse bg-zinc-200 dark:bg-zinc-800" style={{ aspectRatio: "210 / 297" }} />
     );

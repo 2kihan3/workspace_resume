@@ -239,6 +239,16 @@ impl TemplateService {
         Ok(())
     }
 
+    pub async fn set_preview_path(&self, id: &str, rel: &str) -> AppResult<()> {
+        sqlx::query("UPDATE templates SET preview_path = ?, updated_at = ? WHERE id = ?")
+            .bind(rel)
+            .bind(now_rfc3339())
+            .bind(id)
+            .execute(&*self.db)
+            .await?;
+        Ok(())
+    }
+
     /// 读取模板的 entry HTML、CSS 与 manifest（渲染与详情展示用）。
     pub fn read_template_assets(&self, id: &str) -> AppResult<(String, String, String)> {
         let dir = self.layout.template_dir(id);

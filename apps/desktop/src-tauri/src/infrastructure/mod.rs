@@ -4,3 +4,4 @@ pub mod file_repo;
 pub mod paths;
 pub mod pdf;
 pub mod resume_markdown;
+pub mod snapshot;

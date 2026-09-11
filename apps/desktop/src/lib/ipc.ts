@@ -175,6 +175,10 @@ export const api = {
     invoke<void>("set_template_enabled", { id, enabled }),
   importTemplateZip: (zipPath: string) => invoke<Template>("import_template_zip", { zipPath }),
   readTemplateAssets: (id: string) => invoke<TemplateAssets>("read_template_assets", { id }),
+  saveTemplatePreview: (templateId: string, renderedHtml: string) =>
+    invoke<string>("save_template_preview", { templateId, renderedHtml }),
+  readTemplatePreview: (templateId: string) =>
+    invoke<string | null>("read_template_preview", { templateId }),
 
   // ai
   readAIStatus: () => invoke<AIServiceStatus>("read_ai_status"),

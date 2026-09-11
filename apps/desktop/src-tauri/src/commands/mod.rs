@@ -281,6 +281,52 @@ pub async fn read_template_assets(state: State<'_, AppState>, id: String) -> Res
     Ok(TemplateAssets { template_html, style_css, manifest_json })
 }
 
+/// 生成模板静态预览图（spec §8.3）：前端渲染 mock HTML，Rust 用 WKWebView 快照为 PNG。
+#[tauri::command]
+#[specta::specta]
+pub async fn save_template_preview(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    template_id: String,
+    rendered_html: String,
+) -> Result<String, SerializedError> {
+    let base_dir = state.layout.template_dir(&template_id);
+    let png = crate::infrastructure::snapshot::snapshot_png(
+        &app,
+        crate::infrastructure::snapshot::SnapshotRequest {
+            html: rendered_html,
+            base_dir: base_dir.clone(),
+            width: 794.0,
+            height: 1123.0,
+        },
+    )?;
+    let preview_path = base_dir.join("preview.png");
+    crate::infrastructure::file_repo::atomic_write(&preview_path, &png)?;
+    let rel = state.layout.relativize(&preview_path)?;
+    template_service(&state).set_preview_path(&template_id, &rel).await?;
+    Ok(rel)
+}
+
+/// 读取模板静态预览图（base64 data URL）；未生成时返回 null。
+#[tauri::command]
+#[specta::specta]
+pub async fn read_template_preview(
+    state: State<'_, AppState>,
+    template_id: String,
+) -> Result<Option<String>, SerializedError> {
+    let dir = state.layout.template_dir(&template_id);
+    let path = dir.join("preview.png");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let bytes = std::fs::read(&path)?;
+    use base64::Engine as _;
+    Ok(Some(format!(
+        "data:image/png;base64,{}",
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    )))
+}
+
 // ---- AI ----
 
 #[tauri::command]
