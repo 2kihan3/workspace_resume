@@ -60,7 +60,6 @@ mod macos {
     use std::sync::mpsc;
 
     const TOTAL_TIMEOUT_SECS: u64 = 10;
-    const MAX_FONT_POLLS: usize = 20;
 
     pub fn export_pdf(
         handle: &tauri::AppHandle,
@@ -68,7 +67,10 @@ mod macos {
     ) -> AppResult<PdfExportResultMac> {
         let (tx, rx) = mpsc::channel::<Result<Vec<u8>, String>>();
         let out_path = req.output_path.clone();
-        let html = format!("<style>{}</style>\n{}", req.page_css, req.html);
+        let html = crate::infrastructure::snapshot::inject_ready_marker(&format!(
+            "<style>{}</style>\n{}",
+            req.page_css, req.html
+        ));
 
         let tx_main = tx.clone();
         handle
@@ -96,7 +98,7 @@ mod macos {
                 let _ = unsafe {
                     webview.loadHTMLString_baseURL(&NSString::from_str(&html), Some(&base_url))
                 };
-                poll_fonts_then_create_pdf(webview, tx_main, 0);
+                poll_ready_then_create_pdf(webview, tx_main, 0);
             })
             .map_err(|e| AppError::Internal(format!("无法在主线程启动导出: {e}")))?;
 
@@ -121,32 +123,35 @@ mod macos {
         }
     }
 
-    /// fonts.ready resolve 后调用 createPDF；页面尚未加载完则重试。
-    fn poll_fonts_then_create_pdf(
+    /// 页面就绪（标记 + complete + 字体）后调用 createPDF；否则继续探测。
+    /// 旧空白上下文中脚本返回 "wait"，由重试兜底（修复空 PDF）。
+    fn poll_ready_then_create_pdf(
         webview: Retained<WKWebView>,
         tx: mpsc::Sender<Result<Vec<u8>, String>>,
         attempt: usize,
     ) {
-        if attempt >= MAX_FONT_POLLS {
-            create_pdf(&webview, tx);
+        use crate::infrastructure::snapshot::MAX_WAIT_ATTEMPTS;
+
+        if attempt >= MAX_WAIT_ATTEMPTS {
+            let _ = tx.send(Err("页面加载等待超时（未探测到就绪标记）".into()));
             return;
         }
-        let js = NSString::from_str("document.fonts.ready.then(() => 'fonts-done')");
+        let js = NSString::from_str(crate::infrastructure::snapshot::WAIT_JS);
         let tx2 = tx.clone();
         let w_handler = webview.clone();
         let handler = block2::RcBlock::new(
             move |result: *mut AnyObject, _err: *mut NSError| {
-                let done = unsafe {
+                let ready = unsafe {
                     (!result.is_null()).then(|| {
                         Retained::retain(result as *mut NSString)
-                            .map(|s| s.to_string() == "fonts-done")
+                            .map(|s| s.to_string() == "ready")
                             .unwrap_or(false)
                     }) == Some(true)
                 };
-                if done {
+                if ready {
                     create_pdf(&w_handler, tx2.clone());
                 } else {
-                    poll_fonts_then_create_pdf(w_handler.clone(), tx2.clone(), attempt + 1);
+                    poll_ready_then_create_pdf(w_handler.clone(), tx2.clone(), attempt + 1);
                 }
             },
         );

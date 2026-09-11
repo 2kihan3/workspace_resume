@@ -28,14 +28,9 @@ pub fn snapshot_png(
     let tx_main = tx.clone();
     handle
         .run_on_main_thread(move || {
-            use objc2::rc::Retained;
-            use objc2::runtime::AnyObject;
             use objc2::{MainThreadMarker, MainThreadOnly};
-            use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSImage};
-            use objc2_foundation::{NSData, NSDictionary, NSError, NSString, NSURL};
-            use objc2_web_kit::{
-                WKSnapshotConfiguration, WKWebView, WKWebViewConfiguration,
-            };
+            use objc2_foundation::{NSString, NSURL};
+            use objc2_web_kit::{WKWebView, WKWebViewConfiguration};
 
             let mtm = match MainThreadMarker::new() {
                 Some(m) => m,
@@ -56,29 +51,12 @@ pub fn snapshot_png(
                 &NSString::from_str(&base_dir.to_string_lossy()),
                 true,
             );
+            let marker_html = inject_ready_marker(&html);
             let _ = unsafe {
-                webview.loadHTMLString_baseURL(&NSString::from_str(&html), Some(&base_url))
+                webview.loadHTMLString_baseURL(&NSString::from_str(&marker_html), Some(&base_url))
             };
 
-            // fonts.ready 后截屏
-            let js = NSString::from_str("document.fonts.ready.then(() => 'fonts-done')");
-            let w2 = webview.clone();
-            let handler = block2::RcBlock::new(
-                move |result: *mut AnyObject, _err: *mut NSError| {
-                    let done = unsafe {
-                        (!result.is_null()).then(|| {
-                            Retained::retain(result as *mut NSString)
-                                .map(|s| s.to_string() == "fonts-done")
-                                .unwrap_or(false)
-                        }) == Some(true)
-                    };
-                    let _ = done;
-                    take_snapshot(&w2, tx_main.clone(), w, h, 0);
-                },
-            );
-            unsafe {
-                webview.evaluateJavaScript_completionHandler(&js, Some(&handler));
-            }
+            wait_ready_then_snapshot(webview, tx_main, w, h, 0);
         })
         .map_err(|e| AppError::Internal(format!("无法在主线程启动快照: {e}")))?;
 
@@ -97,23 +75,85 @@ pub fn snapshot_png(
     }
 }
 
+/// 就绪探测脚本：延迟 250ms 再判断（给导航提交留时间），只有当
+/// readyState=complete、字体就绪、且页面上存在我们注入的标记时才返回
+/// "ready"。在旧的空白上下文中执行时返回 "wait"，由 Rust 侧重试。
+pub(crate) const WAIT_JS: &str = r#"new Promise(r => setTimeout(() => {
+  const ok = document.readyState === 'complete'
+    && (!document.fonts || document.fonts.status === 'loaded')
+    && document.querySelector('meta[name="jsw-render"]');
+  r(ok ? 'ready' : 'wait');
+}, 250))"#;
+
+/// 最大探测次数（约 40 × 250ms = 10s，与外层超时匹配）。
+pub(crate) const MAX_WAIT_ATTEMPTS: usize = 40;
+
+/// 注入就绪标记，用于区分"目标文档"与加载前的空白上下文。
+pub(crate) fn inject_ready_marker(html: &str) -> String {
+    const MARKER: &str = r#"<meta name="jsw-render" content="1">"#;
+    if let Some(pos) = html.find("<head>") {
+        let mut out = String::with_capacity(html.len() + MARKER.len());
+        out.push_str(&html[..pos + 6]);
+        out.push_str(MARKER);
+        out.push_str(&html[pos + 6..]);
+        out
+    } else {
+        format!("{MARKER}{html}")
+    }
+}
+
+/// 轮询页面就绪后截屏；未就绪则重新探测（脚本自带 250ms 延迟）。
 #[cfg(target_os = "macos")]
-fn take_snapshot(
-    webview: &objc2_web_kit::WKWebView,
+fn wait_ready_then_snapshot(
+    webview: objc2::rc::Retained<objc2_web_kit::WKWebView>,
     tx: std::sync::mpsc::Sender<Result<Vec<u8>, String>>,
     w: f64,
     h: f64,
     attempt: usize,
+) {
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::NSError;
+
+    if attempt >= MAX_WAIT_ATTEMPTS {
+        let _ = tx.send(Err("页面加载等待超时（未探测到就绪标记）".into()));
+        return;
+    }
+    let js = objc2_foundation::NSString::from_str(WAIT_JS);
+    let wv = webview.clone();
+    let handler = block2::RcBlock::new(
+        move |result: *mut AnyObject, _err: *mut NSError| {
+            let ready = unsafe {
+                (!result.is_null()).then(|| {
+                    Retained::retain(result as *mut objc2_foundation::NSString)
+                        .map(|s| s.to_string() == "ready")
+                        .unwrap_or(false)
+                }) == Some(true)
+            };
+            if ready {
+                take_snapshot(wv.clone(), tx.clone(), w, h);
+            } else {
+                wait_ready_then_snapshot(wv.clone(), tx.clone(), w, h, attempt + 1);
+            }
+        },
+    );
+    unsafe {
+        webview.evaluateJavaScript_completionHandler(&js, Some(&handler));
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn take_snapshot(
+    webview: objc2::rc::Retained<objc2_web_kit::WKWebView>,
+    tx: std::sync::mpsc::Sender<Result<Vec<u8>, String>>,
+    w: f64,
+    h: f64,
 ) {
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep};
     use objc2_foundation::NSDictionary;
     use objc2_web_kit::WKSnapshotConfiguration;
 
-    if attempt >= 20 {
-        let _ = tx.send(Err("页面加载等待超时".into()));
-        return;
-    }
     let mtm = MainThreadMarker::new();
     let Some(mtm) = mtm else {
         let _ = tx.send(Err("不在主线程".into()));
