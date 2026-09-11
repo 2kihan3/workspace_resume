@@ -150,8 +150,8 @@ export const api = {
 
   // resumes
   readImportSource: (path: string) => invoke<string>("read_import_source", { path }),
-  importMarkdown: (path: string, normalizedMarkdown: string, title: string) =>
-    invoke<Resume>("import_markdown", { path, normalizedMarkdown, title }),
+  importMarkdown: (path: string, normalizedMarkdown: string, title: string, templateId: string) =>
+    invoke<Resume>("import_markdown", { path, normalizedMarkdown, title, templateId }),
   createBaseResume: (title: string, markdown: string) =>
     invoke<Resume>("create_base_resume", { title, markdown }),
   readResume: (id: string) => invoke<ResumeContent>("read_resume", { id }),

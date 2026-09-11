@@ -17,9 +17,10 @@ function ResumeEditor() {
   const { resumeId } = Route.useParams();
   const qc = useQueryClient();
   const content = useQuery({ queryKey: ["resume", resumeId], queryFn: () => api.readResume(resumeId) });
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const assets = useQuery({
-    queryKey: ["template-assets", content.data?.resume.template_id],
-    queryFn: () => api.readTemplateAssets(content.data!.resume.template_id),
+    queryKey: ["template-assets", templateId ?? content.data?.resume.template_id],
+    queryFn: () => api.readTemplateAssets(templateId ?? content.data!.resume.template_id),
     enabled: !!content.data,
   });
 
@@ -38,6 +39,7 @@ function ResumeEditor() {
     if (content.data && markdown === null) {
       setMarkdown(content.data.markdown);
       setLastValid(content.data.markdown);
+      setTemplateId(content.data.resume.template_id);
     }
   }, [content.data, markdown]);
 
@@ -67,6 +69,8 @@ function ResumeEditor() {
     };
   }, [markdown === null]);
 
+  const templates = useQuery({ queryKey: ["templates"], queryFn: api.listTemplates });
+
   useBlocker({
     shouldBlockFn: () => {
       if (!dirty) return false;
@@ -76,7 +80,7 @@ function ResumeEditor() {
 
   const save = useMutation({
     mutationFn: () =>
-      api.saveResume({ id: resumeId, markdown: markdown!, template_id: content.data?.resume.template_id }),
+      api.saveResume({ id: resumeId, markdown: markdown!, template_id: templateId ?? content.data?.resume.template_id }),
     onSuccess: () => {
       toast.success("已保存");
       setDirty(false);
@@ -116,7 +120,7 @@ function ResumeEditor() {
       const outPath = `${content.data.resume.markdown_path.replace(/resume\.md$/, "resume.pdf")}`;
       return api.exportPdfRendered({
         resumeId,
-        templateId: content.data.resume.template_id,
+        templateId: templateId ?? content.data.resume.template_id,
         renderedHtml: result.html,
         pageCss: pageCss(manifest),
         outputPath: outPath,
@@ -148,10 +152,25 @@ function ResumeEditor() {
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center gap-3">
-        <h1 className="flex-1 text-xl font-semibold">{content.data?.resume.title}</h1>
-        <span className={`text-sm ${dirty ? "text-amber-600" : "text-zinc-400"}`}>
+        <h1 className="flex-1 truncate text-xl font-semibold">{content.data?.resume.title}</h1>
+        <span className={`text-sm ${dirty ? "text-amber-600" : "text-muted-foreground"}`}>
           {dirty ? "未保存" : "已保存"}
         </span>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          模板
+          <select
+            value={templateId ?? content.data?.resume.template_id ?? ""}
+            onChange={(e) => {
+              setTemplateId(e.target.value);
+              setDirty(true);
+            }}
+            className="h-11 max-w-40 rounded-md border border-input bg-card px-3 text-sm text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            {(templates.data ?? []).map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </label>
         <button onClick={() => save.mutate()} disabled={save.isPending || !(parsed?.ok)}
           className="h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50">
           保存

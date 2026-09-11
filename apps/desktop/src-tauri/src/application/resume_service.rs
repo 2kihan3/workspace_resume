@@ -68,6 +68,7 @@ impl ResumeService {
         source_path: &str,
         normalized_markdown: &str,
         title: &str,
+        template_id: &str,
     ) -> AppResult<Resume> {
         let source_abs = std::path::PathBuf::from(source_path);
         if !source_abs.exists() {
@@ -86,11 +87,12 @@ impl ResumeService {
 
         sqlx::query(
             "INSERT INTO resumes (id, title, kind, markdown_path, template_id, content_sha256, schema_version, created_at, updated_at)
-             VALUES (?, ?, 'base', ?, 'builtin.classic', ?, 1, ?, ?)",
+             VALUES (?, ?, 'base', ?, ?, ?, 1, ?, ?)",
         )
         .bind(&id)
         .bind(title)
         .bind(&rel)
+        .bind(template_id)
         .bind(&sha)
         .bind(&now)
         .bind(&now)
@@ -127,7 +129,7 @@ impl ResumeService {
         let sha = sha256_hex(markdown.as_bytes());
         sqlx::query(
             "INSERT INTO resumes (id, title, kind, markdown_path, template_id, content_sha256, schema_version, created_at, updated_at)
-             VALUES (?, ?, 'base', ?, 'builtin.classic', ?, 1, ?, ?)",
+             VALUES (?, ?, 'base', ?, ?, ?, 1, ?, ?)",
         )
         .bind(&id)
         .bind(title)

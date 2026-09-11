@@ -57,8 +57,10 @@ function ResumesPage() {
   const navigate = useNavigate();
   const resumes = useQuery({ queryKey: ["resumes"], queryFn: api.listResumes });
   const jobs = useQuery({ queryKey: ["jobs"], queryFn: () => api.listJobs({}) });
+  const templates = useQuery({ queryKey: ["templates"], queryFn: api.listTemplates });
   const [filter, setFilter] = useState<Filter>("all");
   const [preview, setPreview] = useState<ImportPreviewState | null>(null);
+  const [importTemplate, setImportTemplate] = useState("builtin.classic");
   const [deleting, setDeleting] = useState<Resume | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -83,8 +85,14 @@ function ResumesPage() {
   });
 
   const importFile = useMutation({
-    mutationFn: (p: ImportPreviewState) =>
-      api.importMarkdown(p.path, p.normalizedMarkdown, p.suggestedTitle),
+    mutationFn: (p: ImportPreviewState) => {
+      // 归一化产物的 frontmatter 里 templateId 固定为 classic，按用户选择重写
+      const markdown = p.normalizedMarkdown.replace(
+        /^templateId: .+$/m,
+        `templateId: ${importTemplate}`,
+      );
+      return api.importMarkdown(p.path, markdown, p.suggestedTitle, importTemplate);
+    },
     onSuccess: () => {
       toast.success("简历已导入");
       setPreview(null);
@@ -201,11 +209,23 @@ function ResumesPage() {
               {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}
+          <label className="mb-4 flex w-64 flex-col gap-1.5 text-sm font-medium">
+            使用模板
+            <select
+              value={importTemplate}
+              onChange={(e) => setImportTemplate(e.target.value)}
+              className="h-11 rounded-md border border-input bg-card px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {(templates.data ?? []).filter((t) => t.enabled).map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </label>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setPreview(null)}>取消</Button>
             <Button onClick={() => importFile.mutate(preview)}>确认导入</Button>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">源文件不会被改动，应用里存的是归一化后的副本。</p>
+          <p className="mt-3 text-xs text-muted-foreground">源文件不会被改动，应用里存的是归一化后的副本。模板之后也能在编辑器里换。</p>
         </Card>
       )}
 

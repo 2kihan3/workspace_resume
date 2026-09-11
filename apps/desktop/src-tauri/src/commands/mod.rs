@@ -155,8 +155,8 @@ pub async fn read_import_source(path: String) -> Result<String, SerializedError>
 
 #[tauri::command]
 #[specta::specta]
-pub async fn import_markdown(state: State<'_, AppState>, path: String, normalized_markdown: String, title: String) -> Result<Resume, SerializedError> {
-    Ok(resume_service(&state).import_markdown(&path, &normalized_markdown, &title).await?)
+pub async fn import_markdown(state: State<'_, AppState>, path: String, normalized_markdown: String, title: String, template_id: String) -> Result<Resume, SerializedError> {
+    Ok(resume_service(&state).import_markdown(&path, &normalized_markdown, &title, &template_id).await?)
 }
 
 #[tauri::command]
