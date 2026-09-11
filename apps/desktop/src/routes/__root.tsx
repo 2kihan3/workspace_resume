@@ -19,19 +19,28 @@ function RootLayout() {
     <div className="flex h-full">
       <nav
         aria-label="主导航"
-        className="flex w-48 shrink-0 flex-col gap-1 border-r border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900"
+        className="flex w-52 shrink-0 flex-col gap-1 border-r border-border bg-card p-3"
       >
-        <div className="mb-4 px-2 text-lg font-semibold">求职工作台</div>
+        <div className="mb-4 flex items-center gap-2.5 px-2 py-2">
+          <span
+            aria-hidden
+            className="grid size-9 place-items-center rounded-lg bg-primary font-semibold text-primary-foreground"
+          >
+            职
+          </span>
+          <span className="text-base font-semibold">求职工作台</span>
+        </div>
         {NAV.map((item) => {
           const active = pathname === item.to || pathname.startsWith(item.to + "/");
           return (
             <Link
               key={item.to}
               to={item.to}
-              className={`rounded-md px-3 py-2 text-[15px] min-h-[44px] flex items-center ${
+              aria-current={active ? "page" : undefined}
+              className={`flex min-h-11 items-center rounded-lg px-3 text-[15px] transition-colors duration-150 ${
                 active
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
               }`}
             >
               {item.label}

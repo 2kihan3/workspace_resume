@@ -42,7 +42,7 @@ function SettingsPage() {
       if (r.kind === "chatgptDeviceCode" && r.user_code) {
         toast.info(`请在浏览器输入授权码：${r.user_code}`);
       } else {
-        toast.success("登录流程已发起，请在浏览器完成");
+        toast.success("已在浏览器打开登录页，完成后回来即可");
       }
       qc.invalidateQueries({ queryKey: ["ai-status"] });
     },
@@ -66,7 +66,7 @@ function SettingsPage() {
   });
   const restore = useMutation({
     mutationFn: (path: string) => api.restoreBackup(path),
-    onSuccess: () => toast.success("恢复完成，重启应用生效"),
+    onSuccess: () => toast.success("恢复完成，重启应用后生效"),
     onError: (e) => toast.error((e as Error).message),
   });
 
@@ -76,10 +76,10 @@ function SettingsPage() {
     <div className="flex max-w-3xl flex-col gap-6">
       <h1 className="text-2xl font-semibold">设置</h1>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">Codex App Server</h2>
         <div className="mb-3 text-sm">
-          <div>CLI 路径：{s?.codex_path ?? "未找到（请安装 codex-cli 或在后续版本中指定路径）"}</div>
+          <div>CLI 路径：{s?.codex_path ?? "未找到，请先安装 codex-cli"}</div>
           <div>版本：{s?.codex_version ?? "—"}</div>
           <div>状态：{s?.app_server_state ?? "stopped"}</div>
           <div>
@@ -88,18 +88,18 @@ function SettingsPage() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => startServer.mutate()} disabled={startServer.isPending}
-            className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+            className="h-11  rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50">
             启动 / 连接
           </button>
           {s?.logged_in ? (
             <button onClick={() => logout.mutate()}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">
+              className="h-11  rounded-md border border-input bg-card px-4 hover:bg-muted">
               退出登录
             </button>
           ) : (
             <>
               <select value={loginMode} onChange={(e) => setLoginMode(e.target.value as "chatgpt" | "apiKey")}
-                className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800">
+                className="h-11 rounded-md border border-input bg-card px-3">
                 <option value="chatgpt">ChatGPT 登录</option>
                 <option value="apiKey">API Key</option>
               </select>
@@ -110,11 +110,11 @@ function SettingsPage() {
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="sk-…（仅内存使用，不保存）"
-                  className="min-h-[44px] w-64 rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800"
+                  className="h-11 w-64 rounded-md border border-input bg-card px-3"
                 />
               )}
               <button onClick={() => login.mutate()} disabled={login.isPending || (loginMode === "apiKey" && !apiKey)}
-                className="min-h-[44px] rounded-md border border-zinc-300 px-4 disabled:opacity-50 dark:border-zinc-700">
+                className="h-11  rounded-md border border-zinc-300 px-4 disabled:opacity-50 dark:border-zinc-700">
                 登录
               </button>
             </>
@@ -122,15 +122,15 @@ function SettingsPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">Skills（本机工作区 .agents/skills）</h2>
         <div className="flex flex-col gap-2">
           {(skills.data ?? []).map((sk) => (
             <div key={sk.name} className="flex items-center justify-between rounded-md bg-zinc-50 p-3 text-sm dark:bg-zinc-800/60">
               <div>
                 <div className="font-medium">{sk.name}</div>
-                <div className="text-zinc-500">{sk.description}</div>
-                {sk.error && <div className="text-rose-600">{sk.error}</div>}
+                <div className="text-muted-foreground">{sk.description}</div>
+                {sk.error && <div className="text-destructive">{sk.error}</div>}
               </div>
               {sk.path && (
                 <label className="flex items-center gap-2">
@@ -142,18 +142,18 @@ function SettingsPage() {
             </div>
           ))}
           {skills.data?.length === 0 && (
-            <div className="text-sm text-zinc-500">
-              暂无 Skill。启动 App Server 后会加载工作区中的内置 Skill。
+            <div className="text-sm text-muted-foreground">
+              还没有加载到 Skill。先启动 App Server，工作区里的内置 Skill 会自动出现。
             </div>
           )}
         </div>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">备份与恢复</h2>
         <div className="flex gap-2">
           <button onClick={() => backup.mutate()}
-            className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
+            className="h-11  rounded-md bg-primary px-4 text-primary-foreground hover:opacity-90">
             创建备份（.jsw-backup）
           </button>
           <button
@@ -167,11 +167,11 @@ function SettingsPage() {
               if (!path || typeof path !== "string") return;
               restore.mutate(path);
             }}
-            className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">
+            className="h-11  rounded-md border border-input bg-card px-4 hover:bg-muted">
             从备份恢复
           </button>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">备份包含数据库与工作区，不含 Codex 凭据、日志与临时 AI 运行目录。</p>
+        <p className="mt-2 text-xs text-muted-foreground">备份里有数据库和工作区；Codex 凭据、日志和临时的 AI 运行目录不会进去。</p>
       </section>
     </div>
   );

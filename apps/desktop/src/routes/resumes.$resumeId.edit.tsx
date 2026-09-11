@@ -153,28 +153,28 @@ function ResumeEditor() {
           {dirty ? "未保存" : "已保存"}
         </span>
         <button onClick={() => save.mutate()} disabled={save.isPending || !(parsed?.ok)}
-          className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+          className="h-11 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50">
           保存
         </button>
         <button onClick={() => saveVersion.mutate()}
-          className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">
+          className="h-11 rounded-md border border-input bg-card px-4 text-sm font-medium transition-colors hover:bg-muted">
           另存为版本
         </button>
         <button onClick={() => exportPdf.mutate()} disabled={exportPdf.isPending || !parsed?.ok}
-          className="min-h-[44px] rounded-md border border-zinc-300 px-4 disabled:opacity-50 dark:border-zinc-700">
+          className="h-11 rounded-md border border-input bg-card px-4 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50">
           导出 PDF
         </button>
       </div>
 
       {parsed && !parsed.ok && (
-        <div role="alert" className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-300">
+        <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
           {parsed.errors.map((e, i) => <div key={i}>· {e}</div>)}
         </div>
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
-        <div ref={editorRef} className="min-h-0 overflow-auto rounded-lg border border-zinc-200 bg-white p-2 dark:border-zinc-800 dark:bg-zinc-900 [&_.cm-editor]:h-full [&_.cm-scroller]:font-mono" style={{ fontSize: 15 }} />
-        <div className="min-h-0 overflow-auto rounded-lg border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+        <div ref={editorRef} className="min-h-0 overflow-auto rounded-lg border border-border bg-card p-2 [&_.cm-editor]:h-full [&_.cm-scroller]:font-mono" style={{ fontSize: 15 }} />
+        <div className="min-h-0 overflow-auto rounded-lg border border-border bg-card p-6">
           <div className="resume-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
         </div>
       </div>

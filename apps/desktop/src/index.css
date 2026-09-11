@@ -1,10 +1,75 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light dark;
+/* ── 设计 tokens（ui-ux-pro-max：teal 主色 + 中性暖灰底 + 微交互）────────
+ * 语义色替代裸色值（shadcn 规范）；暗色跟随系统。
+ * ────────────────────────────────────────────────────────────────────── */
+@theme {
   --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* 基础表面 */
+  --color-background: #fafaf9;
+  --color-foreground: #1c1917;
+  --color-card: #ffffff;
+  --color-card-foreground: #1c1917;
+  --color-muted: #f5f5f4;
+  --color-muted-foreground: #57534e;
+  --color-border: #e7e5e4;
+  --color-input: #d6d3d1;
+  --color-ring: #0d9488;
+
+  /* 主色（teal）与语义色 */
+  --color-primary: #0f766e;
+  --color-primary-foreground: #ffffff;
+  --color-accent: #f0fdfa;
+  --color-accent-foreground: #134e4a;
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #ffffff;
+  --color-secondary: #f5f5f4;
+  --color-secondary-foreground: #1c1917;
+
+  /* 状态色（岗位流转 Badge） */
+  --color-status-neutral: #f4f4f5;
+  --color-status-info: #e0f2fe;
+  --color-status-violet: #ede9fe;
+  --color-status-amber: #fef3c7;
+  --color-status-blue: #dbeafe;
+  --color-status-pass: #d1fae5;
+  --color-status-fail: #ffe4e6;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: #0c0a09;
+    --color-foreground: #fafaf9;
+    --color-card: #1c1917;
+    --color-card-foreground: #fafaf9;
+    --color-muted: #292524;
+    --color-muted-foreground: #a8a29e;
+    --color-border: #292524;
+    --color-input: #44403c;
+    --color-ring: #14b8a6;
+
+    --color-primary: #14b8a6;
+    --color-primary-foreground: #042f2e;
+    --color-accent: #134e4a;
+    --color-accent-foreground: #ccfbf1;
+    --color-destructive: #ef4444;
+    --color-destructive-foreground: #ffffff;
+    --color-secondary: #292524;
+    --color-secondary-foreground: #fafaf9;
+
+    --color-status-neutral: #27272a;
+    --color-status-info: #0c2537;
+    --color-status-violet: #251d47;
+    --color-status-amber: #38260a;
+    --color-status-blue: #0d2136;
+    --color-status-pass: #0c2e21;
+    --color-status-fail: #3b1114;
+  }
+}
+
+/* Tailwind v4 工具类引用 var(--color-*)，上面的媒体查询覆盖即生效 */
 
 html,
 body,
@@ -15,18 +80,27 @@ body,
 body {
   font-family: var(--font-sans);
   font-size: 16px;
+  line-height: 1.5;
   margin: 0;
-  background: var(--color-zinc-50);
-  color: var(--color-zinc-900);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background: var(--color-zinc-950);
-    color: var(--color-zinc-100);
-  }
+/* 键盘焦点可见（可访问性优先级 1） */
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
 }
 
+/* 可点击元素的指针反馈 */
+button:not(:disabled),
+[role="tab"]:not(:disabled),
+[role="button"]:not(:disabled) {
+  cursor: pointer;
+}
+
+/* 交互过渡 150–250ms，尊重系统减弱动态 */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -3,12 +3,13 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { open } from "@tauri-apps/plugin-dialog";
+import { PackageOpen } from "lucide-react";
 import { api } from "../lib/constants";
 import { TemplateThumb } from "../components/TemplateThumb";
 import { TemplateManifestSchema } from "@jsw/template-engine";
 import { generateTemplatePreview, previewAttempted } from "../lib/template-preview";
+import { Button, Empty } from "@jsw/ui";
 import type { Template } from "../lib/types";
-
 
 export const Route = createFileRoute("/templates")({ component: TemplatesPage });
 
@@ -17,7 +18,6 @@ function TemplatesPage() {
   const navigate = useNavigate();
   const templates = useQuery({ queryKey: ["templates"], queryFn: api.listTemplates });
 
-  // 每个模板的 manifest（描述等元信息）
   const assetsList = useQueries({
     queries: (templates.data ?? []).map((t) => ({
       queryKey: ["template-assets", t.id],
@@ -37,6 +37,17 @@ function TemplatesPage() {
     }
   };
 
+  // 为缺少静态预览图的模板补生成（每会话每模板一次，失败就用实时渲染）
+  useEffect(() => {
+    if (!templates.data) return;
+    for (const t of templates.data) {
+      if (t.preview_path || previewAttempted(t.id)) continue;
+      generateTemplatePreview(t.id)
+        .then(() => qc.invalidateQueries({ queryKey: ["templates"] }))
+        .catch(() => {/* 保持实时渲染降级 */});
+    }
+  }, [templates.data, qc]);
+
   const importZip = useMutation({
     mutationFn: (path: string) => api.importTemplateZip(path),
     onSuccess: () => {
@@ -49,17 +60,6 @@ function TemplatesPage() {
     mutationFn: (args: { id: string; enabled: boolean }) => api.setTemplateEnabled(args.id, args.enabled),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["templates"] }),
   });
-
-  // 为缺少静态预览图的模板自动生成（每次会话每模板至多一次，失败降级实时渲染）
-  useEffect(() => {
-    if (!templates.data) return;
-    for (const t of templates.data) {
-      if (t.preview_path || previewAttempted(t.id)) continue;
-      generateTemplatePreview(t.id)
-        .then(() => qc.invalidateQueries({ queryKey: ["templates"] }))
-        .catch(() => {/* 静态图失败时保持实时渲染降级 */});
-    }
-  }, [templates.data, qc]);
 
   const pickAndImport = async () => {
     const path = await open({
@@ -76,17 +76,12 @@ function TemplatesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">模板库</h1>
-        <button
-          onClick={pickAndImport}
-          className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          导入 ZIP 模板包
-        </button>
+        <Button onClick={pickAndImport}>导入 ZIP 模板包</Button>
       </div>
 
-      <p className="text-sm text-zinc-500">
-        模板包为无脚本 HTML/CSS ZIP：manifest.json + template.html + style.css + assets/（仅 PNG/JPEG/WebP/WOFF/WOFF2）。
-        恶意内容（脚本、远程资源、路径穿越）会被拒绝。缩略图使用示例数据渲染。
+      <p className="text-sm text-muted-foreground">
+        模板包是纯 HTML/CSS 的 ZIP：manifest.json + template.html + style.css + assets/。
+        带脚本、远程资源或路径穿越的包会被直接拒绝。缩略图为示例数据效果。
       </p>
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-3 2xl:grid-cols-4">
@@ -101,7 +96,11 @@ function TemplatesPage() {
         ))}
       </div>
       {templates.data?.length === 0 && (
-        <div className="py-16 text-center text-zinc-500">暂无模板。</div>
+        <Empty
+          icon={<PackageOpen aria-hidden />}
+          title="还没有模板"
+          description="可以导入一个 ZIP 模板包试试。"
+        />
       )}
     </div>
   );
@@ -120,19 +119,23 @@ function TemplateCard({
 }) {
   return (
     <div
-      className={`overflow-hidden rounded-lg border bg-white transition-shadow hover:shadow-md dark:bg-zinc-900 ${
+      className={`overflow-hidden rounded-xl border bg-card transition-shadow hover:shadow-md ${
         template.enabled
-          ? "border-zinc-200 dark:border-zinc-800"
-          : "border-dashed border-zinc-300 opacity-70 dark:border-zinc-700"
+          ? "border-border"
+          : "border-dashed border-input opacity-70"
       }`}
     >
-      <button onClick={onOpen} aria-label={`查看模板 ${template.name} 详情`} className="block w-full text-left">
+      <button
+        onClick={onOpen}
+        aria-label={`查看模板 ${template.name} 详情`}
+        className="block w-full cursor-pointer text-left"
+      >
         <TemplateThumb templateId={template.id} />
       </button>
-      <div className="border-t border-zinc-100 p-3 dark:border-zinc-800">
+      <div className="border-t border-border p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium">{template.name}</span>
-          <label className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-500">
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
             <input
               type="checkbox"
               checked={template.enabled}
@@ -141,10 +144,10 @@ function TemplateCard({
             {template.enabled ? "已启用" : "已停用"}
           </label>
         </div>
-        <p className="mt-1 line-clamp-2 min-h-[2.5em] text-sm text-zinc-500">
-          {description ?? "（无描述）"}
+        <p className="mt-1 line-clamp-2 min-h-[2.5em] text-sm text-muted-foreground">
+          {description ?? "（没有描述）"}
         </p>
-        <div className="mt-1 text-xs text-zinc-400">
+        <div className="mt-1 text-xs text-muted-foreground">
           {template.id} · {template.origin === "builtin" ? "内置" : "导入"} · v{template.version}
         </div>
       </div>

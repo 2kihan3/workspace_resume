@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api, JOB_STATUS_LABELS, JOB_STATUS_ORDER } from "../lib/constants";
-import { Badge } from "@jsw/ui";
+import { Badge, Select } from "@jsw/ui";
 import type { JobStatus } from "../lib/types";
 
 export const Route = createFileRoute("/jobs/$jobId")({ component: JobDetail });
@@ -16,7 +16,7 @@ function JobDetail() {
   const job = useQuery({ queryKey: ["job", jobId], queryFn: () => api.getJob(jobId) });
 
   if (!job.data) {
-    return <div className="text-zinc-500">加载中…</div>;
+    return <div className="text-muted-foreground">加载中…</div>;
   }
   const j = job.data;
 
@@ -24,7 +24,7 @@ function JobDetail() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <div>
-          <Link to="/jobs" className="text-sm text-zinc-500 hover:underline">← 返回岗位库</Link>
+          <Link to="/jobs" className="text-sm text-muted-foreground hover:underline">← 返回岗位库</Link>
           <h1 className="text-2xl font-semibold">
             {j.company_name}
             {j.role_title ? ` · ${j.role_title}` : ""}
@@ -33,17 +33,17 @@ function JobDetail() {
         <Badge variant={j.status}>{JOB_STATUS_LABELS[j.status]}</Badge>
       </div>
 
-      <div role="tablist" aria-label="岗位详情" className="flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
+      <div role="tablist" aria-label="岗位详情" className="flex gap-1 border-b border-border">
         {TABS.map((t) => (
           <button
             key={t}
             role="tab"
             aria-selected={tab === t}
             onClick={() => setTab(t)}
-            className={`min-h-[44px] px-4 text-[15px] ${
+            className={`min-h-11 px-4 text-[15px] transition-colors duration-150 ${
               tab === t
-                ? "border-b-2 border-zinc-900 font-medium dark:border-zinc-100"
-                : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+                ? "border-b-2 border-primary font-medium text-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             {t}
@@ -80,51 +80,50 @@ function OverviewTab({ jobId, status }: { jobId: string; status: JobStatus }) {
 
   return (
     <div className="grid grid-cols-2 gap-6">
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">手动调整状态</h2>
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">
             目标状态
-            <select value={target} onChange={(e) => setTarget(e.target.value as JobStatus)}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800">
+            <Select value={target} onChange={(e) => setTarget(e.target.value as JobStatus)}>
               {JOB_STATUS_ORDER.map((s) => (
                 <option key={s} value={s}>{JOB_STATUS_LABELS[s]}</option>
               ))}
-            </select>
+            </Select>
           </label>
           {(target === "passed" || target === "rejected") && (
             <label className="flex flex-col gap-1 text-sm">
               原因（可选）
               <input value={reason} onChange={(e) => setReason(e.target.value)}
-                className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800" />
+                className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring" />
             </label>
           )}
           <button onClick={() => transition.mutate()}
-            className="min-h-[44px] self-start rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
+            className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50">
             应用变更
           </button>
         </div>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">时间线</h2>
         <ol className="flex flex-col gap-2 text-sm">
           {(events.data ?? []).map((ev) => (
-            <li key={ev.id} className="border-l-2 border-zinc-200 pl-3 dark:border-zinc-700">
+            <li key={ev.id} className="border-l-2 border-border pl-3">
               <div>
                 {ev.event_type}
                 {ev.from_status && ev.to_status && (
-                  <span className="text-zinc-500">
+                  <span className="text-muted-foreground">
                     ：{JOB_STATUS_LABELS[ev.from_status]} → {JOB_STATUS_LABELS[ev.to_status]}
                   </span>
                 )}
               </div>
-              <div className="text-xs text-zinc-400">
+              <div className="text-xs text-muted-foreground">
                 {ev.occurred_at} · {ev.actor === "user" ? "用户" : ev.actor === "system" ? "系统" : "AI"}
               </div>
             </li>
           ))}
-          {events.data?.length === 0 && <li className="text-zinc-500">暂无事件</li>}
+          {events.data?.length === 0 && <li className="text-muted-foreground">暂无事件</li>}
         </ol>
       </section>
     </div>
@@ -154,47 +153,47 @@ function JdTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-medium">原始 JD</h2>
           {editing ? (
-            <button onClick={() => save.mutate()} className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
+            <button onClick={() => save.mutate()} className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50">
               保存
             </button>
           ) : (
             <button onClick={() => { setDraft(jd.data ?? ""); setEditing(true); }}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">
+              className="">
               编辑
             </button>
           )}
         </div>
         {editing ? (
           <textarea rows={14} value={draft} onChange={(e) => setDraft(e.target.value)}
-            className="w-full rounded-md border border-zinc-300 p-3 font-mono text-[15px] dark:border-zinc-700 dark:bg-zinc-800" />
+            className="w-full rounded-md border border-input bg-card p-3 font-mono text-[15px] transition-colors focus-visible:ring-2 focus-visible:ring-ring" />
         ) : (
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-[15px]">{jd.data}</pre>
         )}
       </section>
 
       {analysis && (
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-2 font-medium">JD 结构化分析</h2>
           <JDAnalysisView json={analysis.content} />
         </section>
       )}
       {research && (
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-2 font-medium">公司调研</h2>
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap text-[15px]">{research.content}</pre>
         </section>
       )}
       {sources && (
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-2 font-medium">调研来源</h2>
           <ul className="flex flex-col gap-1 text-sm">
             {(safeParse(sources.content) as Array<{ title?: string; url?: string; publisher?: string }>).map((s, i) => (
               <li key={i}>
-                <a href={s.url} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline dark:text-blue-400">
+                <a href={s.url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                   {s.title || s.url}
                 </a>
                 {s.publisher ? ` — ${s.publisher}` : ""}
@@ -218,7 +217,7 @@ function JDAnalysisView({ json }: { json: string }) {
     const arr = data[key];
     return Array.isArray(arr) && arr.length > 0 ? (
       <div>
-        <div className="text-sm font-medium text-zinc-500">{key}</div>
+        <div className="text-sm font-medium text-muted-foreground">{key}</div>
         <ul className="list-disc pl-5 text-[15px]">
           {arr.map((v, i) => <li key={i}>{String(v)}</li>)}
         </ul>
@@ -259,13 +258,13 @@ function ResumeTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">生成岗位版简历</h2>
         <div className="flex items-end gap-3">
           <label className="flex flex-1 flex-col gap-1 text-sm">
             选择基础简历
             <select value={selected} onChange={(e) => setSelected(e.target.value)}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800">
+              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring">
               <option value="">请选择…</option>
               {bases.map((r) => <option key={r.id} value={r.id}>{r.title}</option>)}
             </select>
@@ -273,28 +272,28 @@ function ResumeTab({ jobId }: { jobId: string }) {
           <button
             disabled={!selected || enqueue.isPending}
             onClick={() => enqueue.mutate()}
-            className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+            >
             运行优化
           </button>
         </div>
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-muted-foreground">
           将发送 inputs/jd.md、inputs/job.json、inputs/base-resume.md 给本机 Codex。
         </p>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">岗位版简历</h2>
         {job.data?.active_resume_id && (
-          <p className="mb-2 text-xs text-zinc-500">当前生效：{job.data.active_resume_id}</p>
+          <p className="mb-2 text-xs text-muted-foreground">当前生效：{job.data.active_resume_id}</p>
         )}
         <div className="flex flex-col gap-2">
           {tailored.map((r) => (
             <Link key={r.id} to="/resumes/$resumeId/edit" params={{ resumeId: r.id }}
-              className="rounded-md border border-zinc-200 p-3 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800">
-              {r.title} <span className="text-zinc-400">（{r.updated_at}）</span>
+              className="rounded-lg border border-border p-3 text-sm transition-colors hover:bg-muted">
+              {r.title} <span className="text-muted-foreground">（{r.updated_at}）</span>
             </Link>
           ))}
-          {tailored.length === 0 && <div className="text-sm text-zinc-500">暂无岗位版简历</div>}
+          {tailored.length === 0 && <div className="text-sm text-muted-foreground">暂无岗位版简历</div>}
         </div>
       </section>
     </div>
@@ -343,13 +342,13 @@ function CommunicationTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="grid grid-cols-2 gap-6">
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">新增沟通记录</h2>
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-sm">
             渠道
             <select value={channel} onChange={(e) => setChannel(e.target.value)}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800">
+              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring">
               {["phone", "email", "wechat", "linkedin", "meeting", "other"].map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
@@ -358,40 +357,40 @@ function CommunicationTab({ jobId }: { jobId: string }) {
           <label className="flex flex-col gap-1 text-sm">
             联系人
             <input value={contact} onChange={(e) => setContact(e.target.value)}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800" />
+              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
             备注
             <textarea rows={4} value={notes} onChange={(e) => setNotes(e.target.value)}
-              className="rounded-md border border-zinc-300 p-3 text-[15px] dark:border-zinc-700 dark:bg-zinc-800" />
+              className="__TEXTAREA__" />
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={advance} onChange={(e) => setAdvance(e.target.checked)} />
             完成沟通，进入待投递
           </label>
           <button onClick={() => add.mutate()} disabled={add.isPending}
-            className="min-h-[44px] self-start rounded-md bg-zinc-900 px-4 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+            className="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-50">
             记录
           </button>
         </div>
-        <hr className="my-4 border-zinc-200 dark:border-zinc-800" />
+        <hr className="my-4 border-border" />
         <button onClick={() => apply.mutate()} disabled={apply.isPending}
-          className="min-h-[44px] w-full rounded-md border border-zinc-300 dark:border-zinc-700">
+          className="inline-flex h-11 w-full items-center justify-center rounded-md border border-input bg-card px-4 text-sm font-medium transition-colors hover:bg-muted">
           记录投递动作（进入面试阶段）
         </button>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">沟通历史</h2>
         <ol className="flex flex-col gap-2 text-sm">
           {(list.data ?? []).map((c) => (
-            <li key={c.id} className="rounded-md bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <li key={c.id} className="rounded-lg bg-muted/60 p-3">
               <div>{c.channel}{c.contact_name ? ` · ${c.contact_name}` : ""}</div>
-              <div className="text-zinc-500">{c.notes}</div>
-              <div className="text-xs text-zinc-400">{c.occurred_at}</div>
+              <div className="text-muted-foreground">{c.notes}</div>
+              <div className="text-xs text-muted-foreground">{c.occurred_at}</div>
             </li>
           ))}
-          {list.data?.length === 0 && <li className="text-zinc-500">暂无沟通记录</li>}
+          {list.data?.length === 0 && <li className="text-muted-foreground">暂无沟通记录</li>}
         </ol>
       </section>
     </div>
@@ -436,42 +435,42 @@ function InterviewTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">添加面试轮次</h2>
         <div className="flex items-end gap-3">
           <label className="flex flex-1 flex-col gap-1 text-sm">
             轮次名称
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：一面 / 技术面"
-              className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800" />
+              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring" />
           </label>
           <label className="flex flex-col gap-1 text-sm">
             时间（可选）
             <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-3 dark:border-zinc-700 dark:bg-zinc-800" />
+              className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring" />
           </label>
           <button onClick={() => add.mutate()} disabled={!name}
-            className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+            >
             添加
           </button>
         </div>
       </section>
 
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">轮次列表</h2>
         <ol className="flex flex-col gap-2">
           {(list.data ?? []).map((r) => (
-            <li key={r.id} className="flex items-center justify-between rounded-md bg-zinc-50 p-3 dark:bg-zinc-800/60">
+            <li key={r.id} className="flex items-center justify-between rounded-lg bg-muted/60 p-3">
               <div>
                 <span className="font-medium">第 {r.sequence} 轮 · {r.name}</span>
-                <span className="ml-2 text-sm text-zinc-500">{r.status}</span>
-                {r.scheduled_at && <div className="text-xs text-zinc-400">{r.scheduled_at}</div>}
+                <span className="ml-2 text-sm text-muted-foreground">{r.status}</span>
+                {r.scheduled_at && <div className="text-xs text-muted-foreground">{r.scheduled_at}</div>}
               </div>
               {r.status !== "completed" ? (
                 <div className="flex gap-2">
                   <button onClick={() => complete.mutate({ id: r.id, result: "passed" })}
-                    className="min-h-[36px] rounded-md border border-emerald-300 px-3 text-sm">通过</button>
+                    className="h-9 rounded-md border border-emerald-300 px-3 text-sm text-emerald-700 transition-colors hover:bg-emerald-50 dark:hover:bg-emerald-950/40">通过</button>
                   <button onClick={() => complete.mutate({ id: r.id, result: "failed" })}
-                    className="min-h-[36px] rounded-md border border-rose-300 px-3 text-sm">未通过</button>
+                    className="h-9 rounded-md border border-rose-300 px-3 text-sm text-rose-700 transition-colors hover:bg-rose-50 dark:hover:bg-rose-950/40">未通过</button>
                 </div>
               ) : (
                 <span className={`text-sm ${r.result === "passed" ? "text-emerald-600" : r.result === "failed" ? "text-rose-600" : ""}`}>
@@ -480,7 +479,7 @@ function InterviewTab({ jobId }: { jobId: string }) {
               )}
             </li>
           ))}
-          {list.data?.length === 0 && <li className="text-sm text-zinc-500">暂无面试轮次</li>}
+          {list.data?.length === 0 && <li className="text-sm text-muted-foreground">暂无面试轮次</li>}
         </ol>
       </section>
     </div>
@@ -517,40 +516,40 @@ function AIRunsTab({ jobId }: { jobId: string }) {
     <div className="flex flex-col gap-4">
       <div className="flex gap-3">
         <button onClick={() => analysis.mutate()} disabled={analysis.isPending}
-          className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900">
+          >
           运行 JD 分析
         </button>
         <button onClick={() => research.mutate()} disabled={research.isPending}
-          className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">
+          className="">
           运行公司调研（需要网络）
         </button>
       </div>
-      <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">任务记录</h2>
         <table className="w-full text-sm">
           <thead>
-            <tr className="text-left text-zinc-500">
+            <tr className="text-left text-muted-foreground">
               <th className="py-1">类型</th><th>状态</th><th>排队时间</th><th>错误</th><th></th>
             </tr>
           </thead>
           <tbody>
             {(runs.data ?? []).map((r) => (
-              <tr key={r.id} className="border-t border-zinc-100 dark:border-zinc-800">
+              <tr key={r.id} className="border-t border-border">
                 <td className="py-2">{runType(r.run_type)}</td>
                 <td>{runStatus(r.status)}</td>
-                <td className="text-zinc-500">{r.queued_at}</td>
-                <td className="text-rose-600">{r.error_message ?? ""}</td>
+                <td className="text-muted-foreground">{r.queued_at}</td>
+                <td className="text-destructive">{r.error_message ?? ""}</td>
                 <td className="text-right">
                   {["queued", "running", "waiting_approval"].includes(r.status) && (
                     <button
                       onClick={async () => { await api.cancelRun(r.id); qc.invalidateQueries({ queryKey: ["runs", jobId] }); }}
-                      className="text-rose-600 hover:underline">取消</button>
+                      className="text-destructive hover:underline">取消</button>
                   )}
                 </td>
               </tr>
             ))}
             {runs.data?.length === 0 && (
-              <tr><td colSpan={5} className="py-6 text-center text-zinc-500">暂无任务</td></tr>
+              <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">暂无任务</td></tr>
             )}
           </tbody>
         </table>

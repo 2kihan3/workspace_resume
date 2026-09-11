@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "builtin.compact",
-  "name": "紧凑双栏",
+  "id": "builtin.elegant",
+  "name": "典雅衬线",
+  "description": "衬线字体配居中抬头，传统行业和正式场合稳妥",
   "author": "求职工作台",
   "version": "1.0.0",
   "entry": "template.html",
@@ -13,11 +14,10 @@
   "page": {
     "size": "A4",
     "marginMm": [
-      10,
-      10,
-      10,
-      10
+      16,
+      20,
+      16,
+      20
     ]
-  },
-  "description": "双栏排布，一页装下更多内容，适合经历较多的候选人"
+  }
 }

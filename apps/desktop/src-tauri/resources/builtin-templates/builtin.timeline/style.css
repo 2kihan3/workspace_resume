@@ -1,0 +1,93 @@
+/* builtin.timeline —— 全程一条时间轴：章节标题是节点，经历顺着轴往下走 */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #263238;
+  font-size: 10.5pt;
+  line-height: 1.55;
+}
+
+/* 基本信息（第一个 h1 区）不进时间轴，做成抬头 */
+.resume-body h1 {
+  font-size: 20pt;
+  margin: 0 0 2pt;
+  color: #00695c;
+}
+.resume-body > h2:first-of-type {
+  margin-top: 10pt;
+}
+
+/* 时间轴主体：每个章节标题作为节点 */
+.resume-body h2 {
+  font-size: 12pt;
+  margin: 14pt 0 8pt;
+  padding-left: 22pt;
+  position: relative;
+  color: #00695c;
+  letter-spacing: 0.5pt;
+}
+.resume-body h2::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 9pt;
+  height: 9pt;
+  border-radius: 50%;
+  background: #00695c;
+  box-shadow: 0 0 0 2.5pt #b2dfdb;
+}
+.resume-body h2::after {
+  /* 节点之间的连线由 body 的轴承担 */
+  content: none;
+}
+
+/* 轴线：贴在内容左侧 */
+.resume-body {
+  position: relative;
+}
+.resume-body::before {
+  content: "";
+  position: absolute;
+  left: 4pt;
+  top: 44pt;
+  bottom: 8pt;
+  width: 1.5pt;
+  background: #b2dfdb;
+  border-radius: 1pt;
+}
+
+/* 章节内容右移避开轴线 */
+.resume-body h3,
+.resume-body p,
+.resume-body ul,
+.resume-body table,
+.resume-body blockquote {
+  margin-left: 22pt;
+  margin-right: 0;
+}
+.resume-body h2:first-of-type ~ * {
+  /* 首个章节标题之后的内容默认已在上面规则里缩进 */
+}
+.resume-body > h1 ~ p,
+.resume-body > h1 ~ ul {
+  margin-left: 0;
+}
+
+.resume-body h3 {
+  font-size: 11pt;
+  margin: 8pt 0 1pt;
+  font-weight: 600;
+}
+.resume-body p { margin-top: 2pt; margin-bottom: 2pt; }
+.resume-body ul { margin-top: 2pt; margin-bottom: 2pt; padding-left: 14pt; }
+.resume-body li { margin: 1.5pt 0; }
+.resume-body a { color: #00796b; text-decoration: none; }
+.resume-body table { border-collapse: collapse; }
+.resume-body th, .resume-body td { border: 0.75pt solid #cfd8dc; padding: 3pt 6pt; text-align: left; }
+.resume-body strong { font-weight: 600; }
+.resume-body hr { display: none; }
+.resume-body code { font-family: ui-monospace, Menlo, monospace; font-size: 9.5pt; background: #eceff1; padding: 0 3pt; border-radius: 2pt; }
+.resume-body img { max-width: 100%; }
+.resume-body blockquote { border-left: 2pt solid #b2dfdb; padding-left: 8pt; color: #546e7a; }

@@ -1,0 +1,74 @@
+/* builtin.elegant —— 衬线字体 + 居中抬头 + 细节分隔，正式而克制 */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", "Songti SC", "Noto Serif SC", serif;
+  color: #21201c;
+  font-size: 10.5pt;
+  line-height: 1.6;
+}
+
+/* 抬头：姓名居中，联系信息列表也居中 */
+.resume-body h1 {
+  font-size: 21pt;
+  text-align: center;
+  margin: 0 0 4pt;
+  letter-spacing: 2pt;
+}
+.resume-body h1 + p {
+  text-align: center;
+  color: #6b675f;
+  font-style: italic;
+}
+.resume-body h1 ~ ul:first-of-type {
+  list-style: none;
+  padding: 0;
+  text-align: center;
+}
+.resume-body h1 ~ ul:first-of-type li {
+  display: inline;
+  margin: 0 6pt;
+}
+/* 基本信息作为抬头的一部分，不再单独标章节名 */
+.resume-body > h2:first-of-type {
+  visibility: hidden;
+  margin: 2pt 0 0;
+  min-height: 0;
+}
+
+/* 章节标题：居中 + 两侧短线 */
+.resume-body h2 {
+  display: flex;
+  align-items: center;
+  gap: 10pt;
+  font-size: 12pt;
+  font-weight: 600;
+  letter-spacing: 3pt;
+  margin: 16pt 0 8pt;
+  color: #3a372f;
+  text-transform: none;
+}
+.resume-body h2::before,
+.resume-body h2::after {
+  content: "";
+  flex: 1;
+  height: 0.75pt;
+  background: #c9c4b8;
+}
+.resume-body h3 {
+  font-size: 11pt;
+  margin: 9pt 0 2pt;
+  font-weight: 600;
+}
+.resume-body p { margin: 3pt 0; }
+.resume-body ul { margin: 3pt 0; padding-left: 15pt; }
+.resume-body li { margin: 1.5pt 0; }
+.resume-body a { color: #5a4fcf; text-decoration: none; border-bottom: 0.5pt solid #d8d4ca; }
+.resume-body table { border-collapse: collapse; width: 100%; }
+.resume-body th, .resume-body td { border-bottom: 0.5pt solid #d8d4ca; padding: 3pt 6pt; text-align: left; }
+.resume-body th { color: #6b675f; font-weight: 600; }
+.resume-body strong { font-weight: 700; }
+.resume-body hr { border: none; border-top: 0.5pt solid #c9c4b8; margin: 10pt 0; }
+.resume-body code { font-family: ui-monospace, Menlo, monospace; font-size: 9.5pt; }
+.resume-body img { max-width: 100%; }
+.resume-body blockquote { margin: 4pt 0; color: #6b675f; font-style: italic; }

@@ -46,11 +46,11 @@ function TemplateDetail() {
   });
   const enabledTip = () => (template?.enabled ? "已停用" : "已启用");
 
-  if (templates.isLoading) return <div className="text-zinc-500">加载中…</div>;
+  if (templates.isLoading) return <div className="text-muted-foreground">加载中…</div>;
   if (!template) {
     return (
-      <div className="py-16 text-center text-zinc-500">
-        模板不存在或已删除。<Link to="/templates" className="text-blue-600 hover:underline">返回模板库</Link>
+      <div className="py-16 text-center text-muted-foreground">
+        模板不存在或已删除。<Link to="/templates" className="text-primary hover:underline">返回模板库</Link>
       </div>
     );
   }
@@ -60,17 +60,17 @@ function TemplateDetail() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <Link to="/templates" className="text-sm text-zinc-500 hover:underline">← 返回模板库</Link>
+        <Link to="/templates" className="text-sm text-muted-foreground hover:underline">← 返回模板库</Link>
         <h1 className="text-2xl font-semibold">{template.name}</h1>
       </div>
 
       <div className="grid grid-cols-[1fr_300px] gap-6">
-        <div className="mx-auto w-full max-w-[640px] overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+        <div className="mx-auto w-full max-w-[640px] overflow-hidden rounded-lg border border-border">
           <TemplateThumb templateId={template.id} />
         </div>
 
         <aside className="flex flex-col gap-4">
-          <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h2 className="mb-2 font-medium">模板信息</h2>
             <dl className="flex flex-col gap-1.5 text-sm">
               <InfoRow label="描述" value={manifest?.description ?? "（无描述）"} />
@@ -91,20 +91,20 @@ function TemplateDetail() {
                 }
               />
             </dl>
-            <p className="mt-3 text-xs text-zinc-400">预览使用示例数据渲染。</p>
+            <p className="mt-3 text-xs text-muted-foreground">预览使用示例数据渲染。</p>
           </section>
 
           <section className="flex flex-col gap-2">
             <button
               onClick={() => setCreatingState(true)}
               disabled={!template.enabled}
-              className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
+              className="min-h-[44px] rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
             >
               用此模板新建简历
             </button>
             <button
               onClick={() => toggle.mutate(!template.enabled)}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700"
+              className="min-h-[44px] rounded-md border border-input bg-card hover:bg-muted"
             >
               {template.enabled ? "停用模板" : "启用模板"}
             </button>
@@ -121,7 +121,7 @@ function TemplateDetail() {
                 }
               }}
               disabled={regenerating}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-4 disabled:opacity-50 dark:border-zinc-700"
+              className="h-11 rounded-md border border-input bg-card px-4 hover:bg-muted disabled:opacity-50 dark:border-zinc-700"
             >
               {regenerating ? "生成中…" : "重新生成预览图"}
             </button>
@@ -144,7 +144,7 @@ function TemplateDetail() {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-20 shrink-0 text-zinc-500">{label}</dt>
+      <dt className="w-20 shrink-0 text-muted-foreground">{label}</dt>
       <dd className="min-w-0 break-words">{value}</dd>
     </div>
   );

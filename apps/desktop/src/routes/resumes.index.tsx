@@ -3,11 +3,21 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Copy, Pencil, Plus, Trash2 } from "lucide-react";
+import { Copy, FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { api } from "../lib/constants";
 import { previewImport } from "@jsw/markdown-resume";
 import { ResumeThumb } from "../components/ResumeThumb";
 import { CreateResumeModal } from "../components/CreateResumeModal";
+import {
+  Button,
+  Card,
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Empty,
+} from "@jsw/ui";
 import type { Resume } from "../lib/types";
 
 export const Route = createFileRoute("/resumes/")({ component: ResumesPage });
@@ -64,7 +74,6 @@ function ResumesPage() {
     filter === "all" ? true : r.kind === filter,
   );
 
-  // 批量拉取每份简历的内容用于缩略图渲染
   const contents = useQueries({
     queries: filtered.map((r) => ({
       queryKey: ["resume", r.id],
@@ -87,7 +96,7 @@ function ResumesPage() {
   const duplicate = useMutation({
     mutationFn: (id: string) => api.duplicateResume(id),
     onSuccess: () => {
-      toast.success("已复制");
+      toast.success("已复制一份");
       qc.invalidateQueries({ queryKey: ["resumes"] });
     },
     onError: (e) => toast.error((e as Error).message),
@@ -134,18 +143,14 @@ function ResumesPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">简历库</h1>
         <div className="flex gap-2">
-          <button
-            onClick={() => setCreating(true)}
-            className="flex min-h-[44px] items-center gap-2 rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            <Plus size={16} aria-hidden /> 新建简历
-          </button>
-          <button
-            onClick={pickAndPreview}
-            className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700"
-          >
+          <Button onClick={() => setCreating(true)}>
+            <Plus data-icon="inline-start" />
+            新建简历
+          </Button>
+          <Button variant="outline" onClick={pickAndPreview}>
+            <FileText data-icon="inline-start" />
             导入 Markdown
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -156,14 +161,14 @@ function ResumesPage() {
             role="tab"
             aria-selected={filter === f.key}
             onClick={() => setFilter(f.key)}
-            className={`min-h-[36px] rounded-md px-3 text-sm ${
+            className={`h-9 rounded-lg px-3 text-sm transition-colors duration-150 ${
               filter === f.key
-                ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground"
             }`}
           >
             {f.label}
-            <span className="ml-1 text-xs opacity-70">
+            <span className="ml-1 tabular-nums opacity-70">
               {f.key === "all"
                 ? resumes.data?.length ?? 0
                 : (resumes.data ?? []).filter((r) => r.kind === f.key).length}
@@ -173,35 +178,35 @@ function ResumesPage() {
       </div>
 
       {preview && (
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-          <h2 className="mb-2 font-medium">导入预览：{preview.fileName}</h2>
-          <table className="mb-3 w-full text-sm">
+        <Card className="p-5">
+          <h2 className="mb-3 font-medium">导入预览：{preview.fileName}</h2>
+          <table className="mb-4 w-full text-sm">
             <thead>
-              <tr className="text-left text-zinc-500"><th className="py-1">原章节</th><th>映射到</th></tr>
+              <tr className="text-left text-muted-foreground">
+                <th className="py-1 font-normal">原章节</th>
+                <th className="font-normal">映射到</th>
+              </tr>
             </thead>
             <tbody>
               {preview.mapping.map((m, i) => (
-                <tr key={i} className="border-t border-zinc-100 dark:border-zinc-800">
-                  <td className="py-1">{m.sourceTitle}</td>
+                <tr key={i} className="border-t border-border">
+                  <td className="py-1.5">{m.sourceTitle}</td>
                   <td>{m.mappedTo ?? <span className="text-amber-600">自定义章节</span>}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {preview.warnings.length > 0 && (
-            <ul className="mb-3 list-disc pl-5 text-sm text-amber-600">
+            <ul className="mb-4 list-disc pl-5 text-sm text-amber-600">
               {preview.warnings.map((w, i) => <li key={i}>{w}</li>)}
             </ul>
           )}
           <div className="flex justify-end gap-2">
-            <button onClick={() => setPreview(null)}
-              className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">取消</button>
-            <button onClick={() => importFile.mutate(preview)}
-              className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
-              确认导入（源文件不会被修改）
-            </button>
+            <Button variant="outline" onClick={() => setPreview(null)}>取消</Button>
+            <Button onClick={() => importFile.mutate(preview)}>确认导入</Button>
           </div>
-        </div>
+          <p className="mt-3 text-xs text-muted-foreground">源文件不会被改动，应用里存的是归一化后的副本。</p>
+        </Card>
       )}
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-3 2xl:grid-cols-4">
@@ -210,7 +215,7 @@ function ResumesPage() {
           return (
             <div
               key={r.id}
-              className="group overflow-hidden rounded-lg border border-zinc-200 bg-white transition-shadow hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+              className="group overflow-hidden rounded-xl border border-border bg-card transition-shadow duration-150 hover:shadow-md"
             >
               <Link
                 to="/resumes/$resumeId/edit"
@@ -221,11 +226,11 @@ function ResumesPage() {
                 {content ? (
                   <ResumeThumb markdown={content.markdown} templateId={r.template_id} title={r.title} />
                 ) : (
-                  <div className="w-full animate-pulse bg-zinc-200 dark:bg-zinc-800" style={{ aspectRatio: "210 / 297" }} />
+                  <div className="w-full animate-pulse bg-muted" style={{ aspectRatio: "210 / 297" }} />
                 )}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-white via-white/80 to-transparent p-3 pt-10 dark:from-zinc-900 dark:via-zinc-900/80">
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-card via-card/85 to-transparent p-3 pt-10">
                   <div className="font-medium">{r.title || "未命名简历"}</div>
-                  <div className="text-xs text-zinc-500">
+                  <div className="text-xs text-muted-foreground">
                     {r.kind === "base" ? "基础简历" : "岗位版"}
                     {r.job_id && jobMap.get(r.job_id) ? ` · ${jobMap.get(r.job_id)}` : ""}
                     {" · "}
@@ -233,15 +238,15 @@ function ResumesPage() {
                   </div>
                 </div>
               </Link>
-              <div className="grid grid-cols-3 border-t border-zinc-100 dark:border-zinc-800">
+              <div className="grid grid-cols-3 border-t border-border">
                 <CardAction label="编辑" onClick={() => navigate({ to: "/resumes/$resumeId/edit", params: { resumeId: r.id } })}>
-                  <Pencil size={14} aria-hidden />
+                  <Pencil aria-hidden />
                 </CardAction>
                 <CardAction label="复制" onClick={() => duplicate.mutate(r.id)}>
-                  <Copy size={14} aria-hidden />
+                  <Copy aria-hidden />
                 </CardAction>
                 <CardAction label="删除" danger onClick={() => setDeleting(r)}>
-                  <Trash2 size={14} aria-hidden />
+                  <Trash2 aria-hidden />
                 </CardAction>
               </div>
             </div>
@@ -250,46 +255,43 @@ function ResumesPage() {
       </div>
 
       {(resumes.data?.length ?? 0) === 0 && (
-        <div className="py-16 text-center text-zinc-500">
-          暂无简历。导入一个 Markdown 文件开始（原始文件不会被修改）。
-        </div>
+        <Empty
+          icon={<FileText aria-hidden />}
+          title="还没有简历"
+          description="从空白建一份，或导入现成的 Markdown 文件（导入不会改动原文件）。"
+          action={
+            <div className="flex gap-2">
+              <Button onClick={() => setCreating(true)}>新建简历</Button>
+              <Button variant="outline" onClick={pickAndPreview}>导入 Markdown</Button>
+            </div>
+          }
+        />
       )}
       {(resumes.data?.length ?? 0) > 0 && filtered.length === 0 && (
-        <div className="py-12 text-center text-zinc-500">该分类下暂无简历。</div>
+        <Empty title="这个分类下还没有简历" description="切换上方的分类看看。" />
       )}
 
       <CreateResumeModal open={creating} onClose={() => setCreating(false)} />
 
-      {deleting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="确认删除简历"
-            className="w-96 rounded-lg bg-white p-6 shadow-xl dark:bg-zinc-900"
-          >
-            <h2 className="mb-2 text-lg font-semibold text-rose-600">删除简历</h2>
-            <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-300">
-              将删除「{deleting.title || "未命名简历"}」及其所有本地快照，此操作不可撤销。
-              {deleting.kind === "base" && " 由它派生的岗位版简历不会被删除，仅解除关联。"}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                className="min-h-[44px] rounded-md px-4 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                onClick={() => setDeleting(null)}
-              >
-                取消
-              </button>
-              <button
-                className="min-h-[44px] rounded-md bg-rose-600 px-4 text-white"
-                onClick={() => remove.mutate(deleting.id)}
-              >
-                删除
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={!!deleting}
+        onOpenChange={(o) => !o && setDeleting(null)}
+        ariaLabel="确认删除简历"
+      >
+        <DialogHeader>
+          <DialogTitle className="text-destructive">删除简历</DialogTitle>
+          <DialogDescription>
+            将删除「{deleting?.title || "未命名简历"}」和它的本地快照，无法恢复。
+            {deleting?.kind === "base" && " 由它派生的岗位版会保留，只是解除关联。"}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setDeleting(null)}>取消</Button>
+          <Button variant="destructive" onClick={() => deleting && remove.mutate(deleting.id)}>
+            删除
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }
@@ -313,10 +315,10 @@ function CardAction({
         onClick();
       }}
       aria-label={label}
-      className={`flex min-h-[40px] items-center justify-center gap-1.5 text-sm transition-colors ${
+      className={`flex min-h-11 items-center justify-center gap-1.5 text-sm transition-colors duration-150 [&_svg]:size-4 ${
         danger
-          ? "text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
-          : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          ? "text-destructive hover:bg-destructive/10"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
     >
       {children}

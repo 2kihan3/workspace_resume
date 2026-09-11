@@ -1,7 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "builtin.compact",
-  "name": "紧凑双栏",
+  "id": "builtin.timeline",
+  "name": "时间线",
+  "description": "经历挂在一条时间轴上，职业路径顺着看下来",
   "author": "求职工作台",
   "version": "1.0.0",
   "entry": "template.html",
@@ -13,11 +14,10 @@
   "page": {
     "size": "A4",
     "marginMm": [
-      10,
-      10,
-      10,
-      10
+      12,
+      14,
+      12,
+      14
     ]
-  },
-  "description": "双栏排布，一页装下更多内容，适合经历较多的候选人"
+  }
 }
