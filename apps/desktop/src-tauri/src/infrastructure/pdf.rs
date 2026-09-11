@@ -136,7 +136,12 @@ mod macos {
             let _ = tx.send(Err("页面加载等待超时（未探测到就绪标记）".into()));
             return;
         }
-        let js = NSString::from_str(crate::infrastructure::snapshot::WAIT_JS);
+        let Some(mtm) = MainThreadMarker::new() else {
+            let _ = tx.send(Err("不在主线程".into()));
+            return;
+        };
+        let body = NSString::from_str(crate::infrastructure::snapshot::WAIT_BODY);
+        let world = unsafe { objc2_web_kit::WKContentWorld::pageWorld(mtm) };
         let tx2 = tx.clone();
         let w_handler = webview.clone();
         let handler = block2::RcBlock::new(
@@ -156,7 +161,13 @@ mod macos {
             },
         );
         unsafe {
-            webview.evaluateJavaScript_completionHandler(&js, Some(&handler));
+            webview.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
+                &body,
+                None,
+                None,
+                &world,
+                Some(&handler),
+            );
         }
     }
 

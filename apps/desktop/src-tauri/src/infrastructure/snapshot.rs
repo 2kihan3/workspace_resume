@@ -75,15 +75,13 @@ pub fn snapshot_png(
     }
 }
 
-/// 就绪探测脚本：延迟 250ms 再判断（给导航提交留时间），只有当
-/// readyState=complete、字体就绪、且页面上存在我们注入的标记时才返回
-/// "ready"。在旧的空白上下文中执行时返回 "wait"，由 Rust 侧重试。
-pub(crate) const WAIT_JS: &str = r#"new Promise(r => setTimeout(() => {
-  const ok = document.readyState === 'complete'
-    && (!document.fonts || document.fonts.status === 'loaded')
-    && document.querySelector('meta[name="jsw-render"]');
-  r(ok ? 'ready' : 'wait');
-}, 250))"#;
+/// 就绪探测脚本（经 callAsyncJavaScript 执行，原生支持 await）：
+/// 先等 250ms 给导航提交留时间，再要求 readyState=complete、字体就绪、
+/// 且页面上存在注入的标记。旧空白上下文缺标记，只会返回 "wait"。
+pub(crate) const WAIT_BODY: &str = r#"await new Promise(r => setTimeout(r, 250));
+return document.readyState === 'complete'
+  && (!document.fonts || document.fonts.status === 'loaded')
+  && document.querySelector('meta[name="jsw-render"]') ? 'ready' : 'wait';"#;
 
 /// 最大探测次数（约 40 × 250ms = 10s，与外层超时匹配）。
 pub(crate) const MAX_WAIT_ATTEMPTS: usize = 40;
@@ -103,6 +101,8 @@ pub(crate) fn inject_ready_marker(html: &str) -> String {
 }
 
 /// 轮询页面就绪后截屏；未就绪则重新探测（脚本自带 250ms 延迟）。
+/// 用 callAsyncJavaScript 执行：它原生 await Promise，evaluateJavaScript
+/// 在部分 WebKit 版本上不会等待 Promise，会导致探测立刻返回空值。
 #[cfg(target_os = "macos")]
 fn wait_ready_then_snapshot(
     webview: objc2::rc::Retained<objc2_web_kit::WKWebView>,
@@ -113,13 +113,20 @@ fn wait_ready_then_snapshot(
 ) {
     use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
+    use objc2::MainThreadMarker;
     use objc2_foundation::NSError;
+    use objc2_web_kit::WKContentWorld;
 
     if attempt >= MAX_WAIT_ATTEMPTS {
         let _ = tx.send(Err("页面加载等待超时（未探测到就绪标记）".into()));
         return;
     }
-    let js = objc2_foundation::NSString::from_str(WAIT_JS);
+    let Some(mtm) = MainThreadMarker::new() else {
+        let _ = tx.send(Err("不在主线程".into()));
+        return;
+    };
+    let body = objc2_foundation::NSString::from_str(WAIT_BODY);
+    let world = unsafe { WKContentWorld::pageWorld(mtm) };
     let wv = webview.clone();
     let handler = block2::RcBlock::new(
         move |result: *mut AnyObject, _err: *mut NSError| {
@@ -138,7 +145,13 @@ fn wait_ready_then_snapshot(
         },
     );
     unsafe {
-        webview.evaluateJavaScript_completionHandler(&js, Some(&handler));
+        webview.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
+            &body,
+            None,
+            None,
+            &world,
+            Some(&handler),
+        );
     }
 }
 

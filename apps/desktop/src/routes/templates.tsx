@@ -44,7 +44,7 @@ function TemplatesPage() {
       if (t.preview_path || previewAttempted(t.id)) continue;
       generateTemplatePreview(t.id)
         .then(() => qc.invalidateQueries({ queryKey: ["templates"] }))
-        .catch(() => {/* 保持实时渲染降级 */});
+        .catch((e) => console.warn(`模板 ${t.id} 预览图生成失败，降级实时渲染：`, e));
     }
   }, [templates.data, qc]);
 
