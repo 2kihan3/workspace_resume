@@ -1,28 +1,30 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/constants";
 import { previewImport } from "@jsw/markdown-resume";
 
 export const Route = createFileRoute("/resumes/")({ component: ResumesPage });
 
+export interface ImportPreviewState {
+  path: string;
+  fileName: string;
+  normalizedMarkdown: string;
+  suggestedTitle: string;
+  mapping: Array<{ sourceTitle: string; mappedTo: string | null }>;
+  warnings: string[];
+}
+
 function ResumesPage() {
   const qc = useQueryClient();
   const resumes = useQuery({ queryKey: ["resumes"], queryFn: api.listResumes });
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [preview, setPreview] = useState<{
-    fileName: string;
-    path: string;
-    markdown: string;
-    suggestedTitle: string;
-    mapping: Array<{ sourceTitle: string; mappedTo: string | null }>;
-    warnings: string[];
-  } | null>(null);
+  const [preview, setPreview] = useState<ImportPreviewState | null>(null);
 
   const importFile = useMutation({
-    mutationFn: (args: { path: string; markdown: string; title: string }) =>
-      api.importMarkdown(args.path, preview?.markdown ?? args.markdown, args.title),
+    mutationFn: (p: ImportPreviewState) =>
+      api.importMarkdown(p.path, p.normalizedMarkdown, p.suggestedTitle),
     onSuccess: () => {
       toast.success("简历已导入");
       setPreview(null);
@@ -31,47 +33,45 @@ function ResumesPage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
-  const onFile = async (file: File) => {
-    // Tauri webview 中 File 对象带完整路径（webkitdirectory 场景外也可用 path）
-    const path = (file as File & { path?: string }).path ?? file.name;
-    const markdown = await file.text();
-    const result = previewImport({
-      fileName: file.name,
-      markdown,
-      suggestedTitle: file.name.replace(/\.md$/i, ""),
+  const pickAndPreview = async () => {
+    // 原生对话框返回绝对路径；HTML input 在 Tauri 中拿不到完整路径
+    const path = await open({
+      multiple: false,
+      directory: false,
+      title: "选择 Markdown 简历",
+      filters: [{ name: "Markdown 简历", extensions: ["md", "markdown", "txt"] }],
     });
-    setPreview({
-      fileName: file.name,
-      path,
-      markdown,
-      suggestedTitle: file.name.replace(/\.md$/i, ""),
-      mapping: result.mapping,
-      warnings: result.warnings,
-    });
+    if (!path || typeof path !== "string") return;
+    try {
+      const markdown = await api.readImportSource(path);
+      const result = previewImport({
+        fileName: path.split("/").pop() ?? "resume.md",
+        markdown,
+        suggestedTitle: (path.split("/").pop() ?? "resume.md").replace(/\.(md|markdown|txt)$/i, ""),
+      });
+      setPreview({
+        path,
+        fileName: path.split("/").pop() ?? "resume.md",
+        normalizedMarkdown: result.normalizedMarkdown,
+        suggestedTitle: (path.split("/").pop() ?? "resume.md").replace(/\.(md|markdown|txt)$/i, ""),
+        mapping: result.mapping,
+        warnings: result.warnings,
+      });
+    } catch (e) {
+      toast.error(`读取文件失败：${(e as Error).message}`);
+    }
   };
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">简历库</h1>
-        <div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".md,text/markdown"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onFile(f);
-            }}
-          />
-          <button
-            onClick={() => fileRef.current?.click()}
-            className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900"
-          >
-            导入 Markdown 简历
-          </button>
-        </div>
+        <button
+          onClick={pickAndPreview}
+          className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900"
+        >
+          导入 Markdown 简历
+        </button>
       </div>
 
       {preview && (
@@ -98,8 +98,7 @@ function ResumesPage() {
           <div className="flex justify-end gap-2">
             <button onClick={() => setPreview(null)}
               className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">取消</button>
-            <button
-              onClick={() => importFile.mutate({ path: preview.path, markdown: preview.markdown, title: preview.suggestedTitle })}
+            <button onClick={() => importFile.mutate(preview)}
               className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
               确认导入（源文件不会被修改）
             </button>

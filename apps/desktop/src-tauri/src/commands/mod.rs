@@ -137,6 +137,22 @@ pub async fn dashboard_metrics(state: State<'_, AppState>) -> Result<crate::appl
 
 // ---- Resumes ----
 
+/// 导入预览：读取用户通过原生对话框选择的 Markdown 源文件内容。
+/// UI 不直接访问文件系统，统一走此命令（spec §17）。
+#[tauri::command]
+#[specta::specta]
+pub async fn read_import_source(path: String) -> Result<String, SerializedError> {
+    let abs = std::path::PathBuf::from(&path);
+    if !abs.is_file() {
+        return Err(SerializedError::new("not_found", format!("源文件不存在: {path}")));
+    }
+    let meta = std::fs::metadata(&abs)?;
+    if meta.len() > 5 * 1024 * 1024 {
+        return Err(SerializedError::new("validation", "文件超过 5MB 限制"));
+    }
+    Ok(std::fs::read_to_string(&abs)?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn import_markdown(state: State<'_, AppState>, path: String, normalized_markdown: String, title: String) -> Result<Resume, SerializedError> {
@@ -597,15 +613,6 @@ pub async fn app_info(state: State<'_, AppState>, app: tauri::AppHandle) -> Resu
         version: app.package_info().version.to_string(),
         app_data_dir: state.layout.app_data_dir.to_string_lossy().to_string(),
     })
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn pick_file(_app: tauri::AppHandle, title: String, filters_ext: Vec<String>) -> Result<Option<String>, SerializedError> {
-    // 使用 tauri-plugin-dialog 不可用时的轻量实现：依赖前端 <input type=file> 由 Tauri 处理。
-    // 首版通过 rfd 不引入；此处返回 None，前端用 dialog 插件或 input 元素。
-    let _ = (title, filters_ext);
-    Ok(None)
 }
 
 #[tauri::command]

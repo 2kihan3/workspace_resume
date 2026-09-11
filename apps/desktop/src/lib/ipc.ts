@@ -148,6 +148,7 @@ export const api = {
   dashboardMetrics: () => invoke<DashboardMetrics>("dashboard_metrics"),
 
   // resumes
+  readImportSource: (path: string) => invoke<string>("read_import_source", { path }),
   importMarkdown: (path: string, normalizedMarkdown: string, title: string) =>
     invoke<Resume>("import_markdown", { path, normalizedMarkdown, title }),
   createBaseResume: (title: string, markdown: string) =>

@@ -58,6 +58,7 @@ pub fn run() {
         commands::create_backup,
         commands::restore_backup,
         commands::app_info,
+        commands::read_import_source,
         commands::run_recovery_scan,
     ));
 
@@ -70,6 +71,7 @@ pub fn run() {
         .expect("导出 TS 绑定失败");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(builder.invoke_handler())
         .setup(move |app| {
             builder.mount_events(app);

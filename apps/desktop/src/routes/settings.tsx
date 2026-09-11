@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { listen } from "@tauri-apps/api/event";
+import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/constants";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -70,7 +71,6 @@ function SettingsPage() {
   });
 
   const s = status.data;
-  const backupRef = useRef<HTMLInputElement>(null);
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -156,14 +156,17 @@ function SettingsPage() {
             className="min-h-[44px] rounded-md bg-zinc-900 px-4 text-white dark:bg-zinc-100 dark:text-zinc-900">
             创建备份（.jsw-backup）
           </button>
-          <input ref={backupRef} type="file" accept=".jsw-backup,.zip" className="hidden"
-            onChange={async (e) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              const path = (f as File & { path?: string }).path ?? f.name;
+          <button
+            onClick={async () => {
+              const path = await open({
+                multiple: false,
+                directory: false,
+                title: "选择备份文件",
+                filters: [{ name: "备份文件", extensions: ["jsw-backup", "zip"] }],
+              });
+              if (!path || typeof path !== "string") return;
               restore.mutate(path);
-            }} />
-          <button onClick={() => backupRef.current?.click()}
+            }}
             className="min-h-[44px] rounded-md border border-zinc-300 px-4 dark:border-zinc-700">
             从备份恢复
           </button>
