@@ -429,17 +429,11 @@ pub async fn start_app_server(state: State<'_, AppState>, app: tauri::AppHandle)
         )
         .await
         .map_err(|e| SerializedError::new("internal", e))?;
-    // initialized 通知：通过一次无 id 消息写入 —— 借用 account/read 请求前的机会；
-    // supervisor 的写循环只处理带 id 请求，通知直接通过 handle 不可达，
-    // 由 request loop 完成握手（spec 允许：initialized 为无响应通知）。
-    // 此处复用 respond 通道不可行，改为发送一个 id=-1 请求实现写入再忽略响应。
-    let _ = handle
-        .request_with_timeout(
-            "__initialized__",
-            serde_json::json!({}),
-            std::time::Duration::from_millis(1),
-        )
-        .await;
+    // 握手收尾：发送 initialized 通知（JSON-RPC notification，无 id）
+    handle
+        .notify("initialized", serde_json::json!({}))
+        .await
+        .map_err(|e| SerializedError::new("internal", e))?;
 
     state.ai_service.set_supervisor(handle.clone()).await;
     let app2 = app.clone();

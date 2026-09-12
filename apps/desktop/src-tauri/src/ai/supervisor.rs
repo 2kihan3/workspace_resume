@@ -34,6 +34,8 @@ struct OutgoingRequest {
     params: Value,
     reply: oneshot::Sender<Result<Value, String>>,
     timeout: Duration,
+    /// true = JSON-RPC 通知（无 id，写入即完成）
+    notification: bool,
 }
 
 #[derive(Clone)]
@@ -44,6 +46,24 @@ pub struct SupervisorHandle {
 }
 
 impl SupervisorHandle {
+
+    /// 发送 JSON-RPC 通知（无 id，写入即完成，不等响应）。
+    pub async fn notify(&self, method: &str, params: Value) -> Result<(), String> {
+        let (tx, rx) = oneshot::channel();
+        self.request_tx
+            .send(OutgoingRequest {
+                method: method.to_string(),
+                params,
+                reply: tx,
+                timeout: Duration::from_millis(1),
+                notification: true,
+            })
+            .map_err(|_| "监管器已停止".to_string())?;
+        rx.await
+            .map_err(|_| "通知通道关闭".to_string())
+            .and_then(|r| r.map(|_| ()))
+    }
+
     pub async fn request(&self, method: &str, params: Value) -> Result<Value, String> {
         self.request_with_timeout(method, params, Duration::from_secs(180))
             .await
@@ -57,7 +77,7 @@ impl SupervisorHandle {
     ) -> Result<Value, String> {
         let (tx, rx) = oneshot::channel();
         self.request_tx
-            .send(OutgoingRequest { method: method.to_string(), params, reply: tx, timeout: t })
+            .send(OutgoingRequest { method: method.to_string(), params, reply: tx, timeout: t, notification: false })
             .map_err(|_| "监管器已停止".to_string())?;
         rx.await.map_err(|_| "请求通道关闭".to_string())?
     }
@@ -184,6 +204,31 @@ pub async fn start_supervisor(config: SupervisorConfig) -> Result<SupervisorHand
             let id = next_id.fetch_add(1, Ordering::SeqCst);
             pending.lock().await.insert(id, PendingRequest { tx });
 
+            if req.notification {
+                // 通知：无 id，写入即回复完成
+                let note = json!({
+                    "jsonrpc": "2.0",
+                    "method": req.method,
+                    "params": req.params,
+                });
+                let ok = {
+                    let mut slot = writer_slot.lock().await;
+                    match slot.as_mut().and_then(|c| c.stdin.as_mut()) {
+                        Some(stdin) => {
+                            let mut line = serde_json::to_string(&note).unwrap_or_default();
+                            line.push('\n');
+                            let write = stdin.write_all(line.as_bytes()).await;
+                            match write {
+                                Ok(_) => stdin.flush().await.map_err(|e| e.to_string()),
+                                Err(e) => Err(e.to_string()),
+                            }
+                        }
+                        None => Err("子进程未启动".into()),
+                    }
+                };
+                let _ = req.reply.send(ok.map(|_| Value::Null));
+                continue;
+            }
             let msg = json!({
                 "jsonrpc": "2.0",
                 "id": id,
