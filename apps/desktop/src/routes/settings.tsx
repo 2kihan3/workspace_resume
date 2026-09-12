@@ -71,6 +71,12 @@ function SettingsPage() {
   });
 
   const s = status.data;
+  const appInfo = useQuery({ queryKey: ["app-info"], queryFn: api.appInfo, staleTime: Infinity });
+  // 工作区前缀 = 应用数据目录路径（内置 Skill 的 cwd 都在其下）
+  const workspacePrefix = appInfo.data?.app_data_dir ?? "";
+  const machineSkills = (skills.data ?? []).filter(
+    (sk) => workspacePrefix !== "" && !sk.cwd.startsWith(workspacePrefix),
+  );
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -123,30 +129,59 @@ function SettingsPage() {
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-3 font-medium">Skills（本机工作区 .agents/skills）</h2>
+        <h2 className="mb-3 font-medium">Skills</h2>
+        {/* 应用工作区内置 Skill：置顶展开（AI 任务实际使用这三个） */}
+        <p className="mb-2 text-xs text-muted-foreground">应用工作区（内置，AI 任务使用）</p>
         <div className="flex flex-col gap-2">
-          {(skills.data ?? []).map((sk) => (
-            <div key={sk.name} className="flex items-center justify-between rounded-md bg-zinc-50 p-3 text-sm dark:bg-zinc-800/60">
-              <div>
-                <div className="font-medium">{sk.name}</div>
-                <div className="text-muted-foreground">{sk.description}</div>
-                {sk.error && <div className="text-destructive">{sk.error}</div>}
+          {(skills.data ?? [])
+            .filter((sk) => workspacePrefix !== "" && sk.cwd.startsWith(workspacePrefix))
+            .map((sk) => (
+              <div key={sk.name} className="flex items-center justify-between rounded-md bg-card p-3 text-sm outline outline-1 outline-border">
+                <div className="min-w-0">
+                  <div className="font-medium">{sk.name}</div>
+                  <div className="truncate text-muted-foreground" title={sk.description}>{sk.description}</div>
+                  {sk.error && <div className="text-destructive">{sk.error}</div>}
+                </div>
+                {sk.path && (
+                  <label className="flex shrink-0 cursor-pointer items-center gap-2">
+                    <input type="checkbox" checked={sk.enabled}
+                      onChange={(e) => toggleSkill.mutate({ path: sk.path!, enabled: e.target.checked })} />
+                    {sk.enabled ? "已启用" : "已停用"}
+                  </label>
+                )}
               </div>
-              {sk.path && (
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={sk.enabled}
-                    onChange={(e) => toggleSkill.mutate({ path: sk.path!, enabled: e.target.checked })} />
-                  {sk.enabled ? "已启用" : "已停用"}
-                </label>
-              )}
-            </div>
-          ))}
+            ))}
           {skills.data?.length === 0 && (
             <div className="text-sm text-muted-foreground">
               还没有加载到 Skill。先启动 App Server，工作区里的内置 Skill 会自动出现。
             </div>
           )}
         </div>
+        {/* 本机个人 Skill：默认折叠，仅计数，不参与本应用任务 */}
+        {machineSkills.length > 0 && (
+          <details className="mt-3 rounded-md bg-muted/60 p-3">
+            <summary className="cursor-pointer text-sm text-muted-foreground">
+              本机个人 Skill（{machineSkills.length} 个，来自 ~/.agents/skills 等目录；
+              本应用任务不会使用，展开可查看与启停）
+            </summary>
+            <div className="mt-2 flex max-h-56 flex-col gap-1.5 overflow-auto">
+              {machineSkills.map((sk) => (
+                <div key={`${sk.cwd}/${sk.name}`} className="flex items-center justify-between gap-2 rounded bg-card p-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate" title={`${sk.name} · ${sk.cwd}`}>{sk.name}</span>
+                  {sk.path && (
+                    <label className="flex shrink-0 cursor-pointer items-center gap-1 text-muted-foreground">
+                      <input
+                        type="checkbox" checked={sk.enabled}
+                        onChange={(e) => toggleSkill.mutate({ path: sk.path!, enabled: e.target.checked })}
+                      />
+                      {sk.enabled ? "启用" : "停用"}
+                    </label>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">

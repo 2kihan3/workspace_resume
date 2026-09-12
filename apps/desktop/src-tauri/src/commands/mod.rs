@@ -506,6 +506,8 @@ pub struct SkillInfo {
     pub path: Option<String>,
     pub enabled: bool,
     pub error: Option<String>,
+    /// 发现来源目录（工作区 / 本机个人目录等），UI 据此分组
+    pub cwd: String,
 }
 
 #[tauri::command]
@@ -526,6 +528,11 @@ pub async fn list_skills(state: State<'_, AppState>, force_reload: bool) -> Resu
     let mut out = vec![];
     if let Some(data) = resp.get("data").and_then(|v| v.as_array()) {
         for entry in data {
+            let cwd = entry
+                .get("cwd")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if let Some(skills) = entry.get("skills").and_then(|v| v.as_array()) {
                 for s in skills {
                     out.push(SkillInfo {
@@ -534,6 +541,7 @@ pub async fn list_skills(state: State<'_, AppState>, force_reload: bool) -> Resu
                         path: s.get("path").and_then(|v| v.as_str()).map(String::from),
                         enabled: s.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true),
                         error: None,
+                        cwd: cwd.clone(),
                     });
                 }
             }
@@ -545,6 +553,7 @@ pub async fn list_skills(state: State<'_, AppState>, force_reload: bool) -> Resu
                         path: None,
                         enabled: false,
                         error: e.get("message").and_then(|v| v.as_str()).map(String::from),
+                        cwd: cwd.clone(),
                     });
                 }
             }

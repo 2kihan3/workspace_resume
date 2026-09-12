@@ -86,6 +86,8 @@ export interface SkillInfo {
   path: string | null;
   enabled: boolean;
   error: string | null;
+  /** 发现来源目录（工作区/本机个人目录），UI 据此分组 */
+  cwd: string;
 }
 
 export interface AIRunInput {
