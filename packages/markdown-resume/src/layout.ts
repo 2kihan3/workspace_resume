@@ -223,6 +223,9 @@ ${canvas ? ".jsw-canvas" : "body"} {
 
 /* hero（页头模式）：隐藏章节标题，首行大字，首个列表横排 */
 .jsw-b.hero h2 { display: none; }
+.jsw-b.hero { text-align: center; }
+.jsw-b.hero.ta-left { text-align: left; }
+.jsw-b.hero.ta-right { text-align: right; }
 .jsw-b.hero h1 { font-size: 1.9em; margin: 0 0 .15em; }
 .jsw-b.hero ul { list-style: none; padding-left: 0; margin: .2em 0; }
 .jsw-b.hero li { display: inline; margin: 0 .9em; font-size: .92em; color: #4b5563; }
@@ -245,6 +248,15 @@ ${canvas ? ".jsw-canvas" : "body"} {
 .jsw-grid.axis .jsw-b.hero,
 .jsw-grid.axis .jsw-b.free,
 .jsw-grid.axis .jsw-b.jsw-heading { padding-left: 0; }
+/* 图层遮挡：标题类块背景提到轴线上层，顶部标题区不露线；
+   宽度即遮挡范围（w-8 时余下 4/12 连线照常显示） */
+.jsw-grid.axis .jsw-b.hero:not(.card),
+.jsw-grid.axis .jsw-b.free:not(.card),
+.jsw-grid.axis .jsw-b.jsw-heading:not(.card) {
+  position: relative;
+  z-index: 1;
+  background: #fff;
+}
 .jsw-b h3 { font-size: 1em; margin: .7em 0 .1em; font-weight: 600; }
 .jsw-b p { margin: .25em 0; }
 .jsw-b ul { margin: .25em 0; padding-left: 1.2em; }
