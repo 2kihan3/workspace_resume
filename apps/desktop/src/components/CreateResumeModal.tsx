@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient, useQueries } from "@tanstack/rea
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { api } from "../lib/constants";
+import { api, FEATURED_TEMPLATE_IDS } from "../lib/constants";
 import { buildBlankResumeMarkdown, BLANK_TEMPLATE_ID } from "../lib/blank-resume";
 import { TemplateThumb } from "./TemplateThumb";
 import { TemplateManifestSchema } from "@jsw/template-engine";
@@ -42,7 +42,10 @@ export function CreateResumeModal({
   const [previewId, setPreviewId] = useState<string | null>(initialTemplateId ?? null);
   const [title, setTitle] = useState("我的简历");
 
-  const enabledTemplates = (templates.data ?? []).filter((t) => t.enabled);
+  // 主推模板：模板库与新建入口只展示两套精选；空白简历用 modern
+  const enabledTemplates = (templates.data ?? []).filter(
+    (t) => t.enabled && (FEATURED_TEMPLATE_IDS as readonly string[]).includes(t.id),
+  );
 
   const assetsList = useQueries({
     queries: enabledTemplates.map((t) => ({

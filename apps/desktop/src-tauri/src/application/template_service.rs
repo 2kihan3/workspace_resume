@@ -54,6 +54,7 @@ impl TemplateService {
         if !packaged_dir.exists() {
             return Ok(());
         }
+        let mut installed_ids: Vec<String> = vec![];
         for entry in std::fs::read_dir(packaged_dir)?.filter_map(|e| e.ok()) {
             let manifest_path = entry.path().join("manifest.json");
             if !manifest_path.exists() {
@@ -64,6 +65,32 @@ impl TemplateService {
             copy_dir_overwrite_app_managed(&entry.path(), &dest)?;
             let rel = self.layout.relativize(&dest.join("manifest.json"))?;
             self.upsert_template_row(&manifest, "builtin", &rel).await?;
+            installed_ids.push(manifest.id.clone());
+        }
+        // 清理不再随包提供的内置模板：删除目录与记录，
+        // 引用它们的简历回退到编辑器默认模板 builtin.classic
+        let rows = sqlx::query("SELECT id FROM templates WHERE origin = 'builtin'")
+            .fetch_all(&*self.db)
+            .await?;
+        use sqlx::Row;
+        for row in rows {
+            let id: String = row.get("id");
+            if installed_ids.contains(&id) {
+                continue;
+            }
+            sqlx::query("DELETE FROM templates WHERE id = ?")
+                .bind(&id)
+                .execute(&*self.db)
+                .await?;
+            sqlx::query("UPDATE resumes SET template_id = 'builtin.classic' WHERE template_id = ?")
+                .bind(&id)
+                .execute(&*self.db)
+                .await?;
+            let dir = self.layout.template_dir(&id);
+            if dir.exists() {
+                std::fs::remove_dir_all(dir)?;
+            }
+            tracing::info!("已移除停用内置模板: {id}");
         }
         Ok(())
     }

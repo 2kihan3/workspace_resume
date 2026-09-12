@@ -31,4 +31,4 @@ export function buildBlankResumeMarkdown(title: string, templateId: string): str
 }
 
 /** 空白简历的默认模板（与 magic-resume 的空白行为一致：直接创建）。 */
-export const BLANK_TEMPLATE_ID = "builtin.classic";
+export const BLANK_TEMPLATE_ID = "builtin.modern";

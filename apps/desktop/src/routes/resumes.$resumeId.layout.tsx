@@ -20,6 +20,7 @@ import {
   defaultLayoutFor, renderLayoutCanvas, replaceSectionMarkdown, splitSections,
 } from "@jsw/markdown-resume";
 import { Button } from "@jsw/ui";
+import { TextareaFormatBar, textareaFormatHotkeys } from "../components/TextareaFormatBar";
 
 export const Route = createFileRoute("/resumes/$resumeId/layout")({
   component: LayoutEditor,
@@ -57,6 +58,7 @@ function LayoutEditor() {
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const editAreaRef = useRef<HTMLTextAreaElement>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
@@ -752,13 +754,23 @@ function LayoutEditor() {
                     </span>
                     <span>Esc 取消</span>
                   </div>
+                  <div className="mb-1.5 flex items-center justify-between rounded-md border border-border bg-muted/40 px-1 py-0.5">
+                    <TextareaFormatBar
+                      targetRef={editAreaRef}
+                      value={editText}
+                      onChange={setEditText}
+                    />
+                    <span className="pr-1.5 text-[11px] text-muted-foreground">⌘B / ⌘I / ⌘K</span>
+                  </div>
                   <textarea
+                    ref={editAreaRef}
                     autoFocus
                     value={editText}
                     onChange={(e) => setEditText(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Escape") setEditing(null);
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) commitEdit();
+                      if (e.key === "Escape") { setEditing(null); return; }
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { commitEdit(); return; }
+                      textareaFormatHotkeys(e, editText, setEditText);
                     }}
                     rows={8}
                     className="w-full rounded-md border border-input bg-background p-2 font-mono text-sm focus-visible:ring-2 focus-visible:ring-ring"

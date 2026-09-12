@@ -265,31 +265,29 @@ function ResumeEditor() {
 /** 选区包裹/取消包裹标记（加粗、斜体等）；空选区时插入标记并把光标放中间。 */
 function wrapSelection(view: EditorView, mark: string): boolean {
   const { state } = view;
-  const changes = state.selection.ranges.map((r) => {
-    const text = state.sliceDoc(r.from, r.to);
-    if (
-      text.length >= mark.length * 2 &&
-      text.startsWith(mark) &&
-      text.endsWith(mark)
-    ) {
-      return { from: r.from, to: r.to, insert: text.slice(mark.length, -mark.length) };
-    }
-    return { from: r.from, to: r.to, insert: mark + text + mark };
-  });
   view.dispatch(
     state.changeByRange((r) => {
-      const change = changes.find((c) => c.from === r.from && c.to === r.to);
-      const insert = change ? change.insert : "";
-      const inner = insert.slice(mark.length, insert.length - mark.length);
-      // 保持选区覆盖内部文本；空选区时光标放标记中间
-      const anchor =
-        r.empty
-          ? r.from + mark.length
-          : r.from + mark.length + inner.length;
-      const head = r.empty ? anchor : r.from + mark.length;
+      const text = state.sliceDoc(r.from, r.to);
+      const has =
+        text.length >= mark.length * 2 &&
+        text.startsWith(mark) &&
+        text.endsWith(mark);
+      let insert: string;
+      let innerFrom = 0;
+      let innerTo: number;
+      if (has) {
+        insert = text.slice(mark.length, text.length - mark.length);
+        innerTo = insert.length;
+      } else {
+        insert = mark + text + mark;
+        innerFrom = mark.length;
+        innerTo = mark.length + text.length;
+      }
       return {
         changes: { from: r.from, to: r.to, insert },
-        range: EditorSelection.range(head, anchor),
+        range: r.empty
+          ? EditorSelection.cursor(r.from + mark.length)
+          : EditorSelection.range(r.from + innerFrom, r.from + innerTo),
       };
     }),
   );

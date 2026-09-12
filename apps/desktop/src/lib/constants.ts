@@ -23,3 +23,6 @@ export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   rejected: "未通过",
 };
 export type { LayoutConfig, LayoutBlock } from "./ipc";
+
+/** 模板库与新建弹窗主推的模板；编辑器/导入的模板下拉保留全部。 */
+export const FEATURED_TEMPLATE_IDS = ["builtin.timeline", "builtin.modern"] as const;

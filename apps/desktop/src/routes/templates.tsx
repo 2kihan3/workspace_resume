@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import { open } from "@tauri-apps/plugin-dialog";
 import { PackageOpen } from "lucide-react";
-import { api } from "../lib/constants";
+import { api, FEATURED_TEMPLATE_IDS } from "../lib/constants";
 import { TemplateThumb } from "../components/TemplateThumb";
 import { TemplateManifestSchema } from "@jsw/template-engine";
 import { generateTemplatePreview, previewAttempted } from "../lib/template-preview";
@@ -18,8 +18,11 @@ function TemplatesPage() {
   const navigate = useNavigate();
   const templates = useQuery({ queryKey: ["templates"], queryFn: api.listTemplates });
 
+  const featured = (templates.data ?? []).filter((t) =>
+    (FEATURED_TEMPLATE_IDS as readonly string[]).includes(t.id),
+  );
   const assetsList = useQueries({
-    queries: (templates.data ?? []).map((t) => ({
+    queries: featured.map((t) => ({
       queryKey: ["template-assets", t.id],
       queryFn: () => api.readTemplateAssets(t.id),
       staleTime: Infinity,
@@ -85,7 +88,7 @@ function TemplatesPage() {
       </p>
 
       <div className="grid grid-cols-2 gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-        {(templates.data ?? []).map((t, i) => (
+        {featured.map((t, i) => (
           <TemplateCard
             key={t.id}
             template={t}
