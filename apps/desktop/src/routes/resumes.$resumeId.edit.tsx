@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useBlocker } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { EditorState } from "@codemirror/state";
+import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
+import { Bold, Heading2, Italic, Link2, List } from "lucide-react";
 import { api } from "../lib/constants";
 import { parseResumeDocument, renderSectionHtml, splitSections } from "@jsw/markdown-resume";
 import { renderTemplate, pageCss, TemplateManifestSchema } from "@jsw/template-engine";
@@ -52,7 +53,12 @@ function ResumeEditor() {
         doc: markdown,
         extensions: [
           markdownLanguage(),
-          keymap.of([indentWithTab]),
+          keymap.of([
+            indentWithTab,
+            { key: "Mod-b", run: (v) => wrapSelection(v, "**") },
+            { key: "Mod-i", run: (v) => wrapSelection(v, "*") },
+            { key: "Mod-k", run: insertLink },
+          ]),
           EditorView.lineWrapping,
           EditorView.updateListener.of((u) => {
             if (u.docChanged) {
@@ -227,12 +233,121 @@ function ResumeEditor() {
       )}
 
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
-        <div ref={editorRef} className="min-h-0 overflow-auto rounded-lg border border-border bg-card p-2 [&_.cm-editor]:h-full [&_.cm-scroller]:font-mono" style={{ fontSize: 15 }} />
+        <div className="flex min-h-0 flex-col gap-1">
+          <div role="toolbar" aria-label="格式" className="flex shrink-0 items-center gap-0.5 rounded-md border border-border bg-card px-1 py-0.5">
+            <FormatBtn label="加粗（⌘B）" onClick={() => viewRef.current && wrapSelection(viewRef.current, "**")}>
+              <Bold className="size-4" aria-hidden />
+            </FormatBtn>
+            <FormatBtn label="斜体（⌘I）" onClick={() => viewRef.current && wrapSelection(viewRef.current, "*")}>
+              <Italic className="size-4" aria-hidden />
+            </FormatBtn>
+            <FormatBtn label="二级标题" onClick={() => viewRef.current && prefixLine(viewRef.current, "## ")}>
+              <Heading2 className="size-4" aria-hidden />
+            </FormatBtn>
+            <FormatBtn label="列表项" onClick={() => viewRef.current && prefixLine(viewRef.current, "- ")}>
+              <List className="size-4" aria-hidden />
+            </FormatBtn>
+            <FormatBtn label="链接（⌘K）" onClick={() => viewRef.current && insertLink(viewRef.current)}>
+              <Link2 className="size-4" aria-hidden />
+            </FormatBtn>
+            <span className="ml-auto pr-1.5 text-xs text-muted-foreground">⌘B 加粗 · ⌘K 链接</span>
+          </div>
+          <div ref={editorRef} className="min-h-0 flex-1 overflow-auto rounded-lg border border-border bg-card p-2 [&_.cm-editor]:h-full [&_.cm-scroller]:font-mono" style={{ fontSize: 15 }} />
+        </div>
         <div className="min-h-0 overflow-auto rounded-lg border border-border bg-card p-4">
           <A4Preview html={previewHtml} title="简历预览" className="mx-auto max-w-full rounded shadow-sm" />
         </div>
       </div>
     </div>
+  );
+}
+
+/** 选区包裹/取消包裹标记（加粗、斜体等）；空选区时插入标记并把光标放中间。 */
+function wrapSelection(view: EditorView, mark: string): boolean {
+  const { state } = view;
+  const changes = state.selection.ranges.map((r) => {
+    const text = state.sliceDoc(r.from, r.to);
+    if (
+      text.length >= mark.length * 2 &&
+      text.startsWith(mark) &&
+      text.endsWith(mark)
+    ) {
+      return { from: r.from, to: r.to, insert: text.slice(mark.length, -mark.length) };
+    }
+    return { from: r.from, to: r.to, insert: mark + text + mark };
+  });
+  view.dispatch(
+    state.changeByRange((r) => {
+      const change = changes.find((c) => c.from === r.from && c.to === r.to);
+      const insert = change ? change.insert : "";
+      const inner = insert.slice(mark.length, insert.length - mark.length);
+      // 保持选区覆盖内部文本；空选区时光标放标记中间
+      const anchor =
+        r.empty
+          ? r.from + mark.length
+          : r.from + mark.length + inner.length;
+      const head = r.empty ? anchor : r.from + mark.length;
+      return {
+        changes: { from: r.from, to: r.to, insert },
+        range: EditorSelection.range(head, anchor),
+      };
+    }),
+  );
+  view.focus();
+  return true;
+}
+
+/** 行首加前缀（标题/列表），已是该前缀则移除（toggle）。 */
+function prefixLine(view: EditorView, prefix: string): boolean {
+  const { state } = view;
+  const changes: Array<{ from: number; to?: number; insert: string }> = [];
+  for (const line of state.selection.ranges.map((r) => state.doc.lineAt(r.head))) {
+    const has = line.text.startsWith(prefix);
+    const oldPrefix = has
+      ? prefix
+      : /^(#{1,6} |- |\* |\d+\. )/.exec(line.text)?.[0] ?? "";
+    const insert = has ? "" : prefix;
+    if (oldPrefix !== insert) {
+      changes.push({ from: line.from, to: line.from + oldPrefix.length, insert });
+    }
+  }
+  if (changes.length > 0) view.dispatch({ changes });
+  view.focus();
+  return true;
+}
+
+/** 插入链接：选区作为链接文字，光标落在括号内。 */
+function insertLink(view: EditorView): boolean {
+  const { state } = view;
+  view.dispatch(
+    state.changeByRange((r) => {
+      const text = state.sliceDoc(r.from, r.to) || "链接文字";
+      const insert = `[${text}](url)`;
+      const urlStart = r.from + text.length + 3;
+      return {
+        changes: { from: r.from, to: r.to, insert },
+        range: EditorSelection.range(urlStart, urlStart + 3),
+      };
+    }),
+  );
+  view.focus();
+  return true;
+}
+
+function FormatBtn({ label, onClick, children }: {
+  label: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      {children}
+    </button>
   );
 }
 
