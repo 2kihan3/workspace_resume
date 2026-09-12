@@ -461,7 +461,7 @@ export type JobStatus = "pending_analysis" | "pending_resume_optimization" | "pe
 export type JobSummary = { id: string; company_name: string; role_title: string; status: JobStatus; location: string | null; salary_text: string | null; updated_at: string }
 export type LayoutBlock = { id: string; 
 /**
- * "section"（绑定 md 章节）| "text"（自由文案，内容在 markdown 字段）
+ * "section"（绑定 md 章节）| "text"（自由文案）| "heading"（纯标题组件）
  */
 type: string; sectionId: string | null; 
 /**
@@ -487,7 +487,19 @@ titleOverride: string | null;
 /**
  * 字号档位："small" | "normal" | "large"（None 为 normal）
  */
-size: string | null }
+size: string | null; 
+/**
+ * 与版式绑定："template"（默认，跟随版式风格）| "free"（通用组件，独立基础排版）
+ */
+binding: string | null; 
+/**
+ * 对齐："left" | "center" | "right"（free/heading/hero 组件生效）
+ */
+align: string | null; 
+/**
+ * 页头模式（隐藏章节标题、首行大字居中、首个列表横排）
+ */
+hero: boolean | null }
 export type LayoutConfig = { page: PageSetup; blocks: LayoutBlock[]; theme: LayoutTheme }
 export type LayoutTheme = { primary: string; 
 /**

@@ -211,8 +211,15 @@ ${canvas ? ".jsw-canvas" : "body"} {
 .jsw-b.ta-left { text-align: left; }
 .jsw-b.ta-center { text-align: center; }
 .jsw-b.ta-right { text-align: right; }
+/* 标题默认是 flex（承载装饰），显式对齐时改回块级，text-align 才生效 */
+.jsw-b.ta-center > h1, .jsw-b.ta-center > h2,
+.jsw-b.ta-right > h1, .jsw-b.ta-right > h2 { display: block; }
+.jsw-b.jsw-heading > h1, .jsw-b.jsw-heading > h2 { display: block; }
 .jsw-b.ta-center ul { list-style: none; padding-left: 0; }
 .jsw-b.ta-center li { display: inline; margin: 0 .6em; }
+/* 纯标题组件不吃版式节点装饰 */
+.heading-dot .jsw-b.jsw-heading h2::before,
+.heading-bar .jsw-b.jsw-heading h2::before { content: none; }
 
 /* hero（页头模式）：隐藏章节标题，首行大字，首个列表横排 */
 .jsw-b.hero h2 { display: none; }
