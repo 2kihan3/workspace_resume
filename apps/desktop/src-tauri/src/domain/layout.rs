@@ -48,7 +48,7 @@ impl Default for PageSetup {
 #[serde(rename_all = "camelCase", default)]
 pub struct LayoutBlock {
     pub id: String,
-    /// "section"（绑定 md 章节）| "text"（自由文案，内容在 markdown 字段）
+    /// "section"（绑定 md 章节）| "text"（自由文案）| "heading"（纯标题组件）
     #[serde(rename = "type")]
     pub block_type: String,
     pub section_id: Option<String>,
@@ -65,6 +65,12 @@ pub struct LayoutBlock {
     pub title_override: Option<String>,
     /// 字号档位："small" | "normal" | "large"（None 为 normal）
     pub size: Option<String>,
+    /// 与版式绑定："template"（默认，跟随版式风格）| "free"（通用组件，独立基础排版）
+    pub binding: Option<String>,
+    /// 对齐："left" | "center" | "right"（free/heading/hero 组件生效）
+    pub align: Option<String>,
+    /// 页头模式（隐藏章节标题、首行大字居中、首个列表横排）
+    pub hero: Option<bool>,
 }
 
 impl Default for LayoutBlock {
@@ -80,6 +86,9 @@ impl Default for LayoutBlock {
             tint: None,
             title_override: None,
             size: None,
+            binding: None,
+            align: None,
+            hero: None,
         }
     }
 }

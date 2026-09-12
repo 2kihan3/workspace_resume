@@ -17,7 +17,8 @@ import {
 } from "lucide-react";
 import { api, type LayoutConfig, type LayoutBlock } from "../lib/constants";
 import {
-  defaultLayoutFor, renderLayoutCanvas, replaceSectionMarkdown, splitSections,
+  defaultLayoutFor, renderLayoutCanvas, replaceSectionBody, splitSectionHead,
+  splitSections,
 } from "@jsw/markdown-resume";
 import { Button } from "@jsw/ui";
 import { TextareaFormatBar, textareaFormatHotkeys } from "../components/TextareaFormatBar";
@@ -177,7 +178,8 @@ function LayoutEditor() {
       const block = layout.blocks.find((b) => b.id === id);
       if (!block) return;
       if (block.type === "section") {
-        setEditText(sectionMd.get(block.sectionId ?? "") ?? "");
+        const { body } = splitSectionHead(sectionMd.get(block.sectionId ?? "") ?? "");
+        setEditText(body);
         setEditing({ blockId: id, sectionId: block.sectionId });
       } else {
         setEditText(block.markdown ?? "");
@@ -280,7 +282,7 @@ function LayoutEditor() {
   const commitEdit = () => {
     if (!editing || !layout || markdown === null) return;
     if (editing.sectionId) {
-      setMarkdown(replaceSectionMarkdown(markdown, editing.sectionId, editText));
+      setMarkdown(replaceSectionBody(markdown, editing.sectionId, editText));
     } else {
       update((draft) => {
         const b = draft.blocks.find((x) => x.id === editing.blockId);
@@ -293,7 +295,9 @@ function LayoutEditor() {
 
   const startEdit = (block: LayoutBlock) => {
     if (block.type === "section") {
-      setEditText(sectionMd.get(block.sectionId ?? "") ?? "");
+      // 只编辑正文：标题在编辑卡的「标题」字段单独维护
+      const { body } = splitSectionHead(sectionMd.get(block.sectionId ?? "") ?? "");
+      setEditText(body);
       setEditing({ blockId: block.id, sectionId: block.sectionId });
     } else {
       setEditText(block.markdown ?? "");
@@ -344,7 +348,8 @@ function LayoutEditor() {
         const base: LayoutBlock = {
           id: `blk-${id}`, type: "section", sectionId: id, markdown: null,
           width: 12, hidden: false, card: false, tint: null,
-          titleOverride: null, size: null,
+          titleOverride: null, size: null, binding: null, align: null,
+          hero: id === "basic" ? true : null,
         };
         if (preset === "sidebar") {
           if (["basic", "skills", "education"].includes(id)) return { ...base, width: 4 };
@@ -453,7 +458,12 @@ function LayoutEditor() {
             <section className="rounded-xl border border-primary/40 bg-card p-4">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">
-                  编辑 · {selected.type === "section" ? sectionLabel(selected.sectionId) : "文本容器"}
+                  编辑 ·{" "}
+                  {selected.type === "section"
+                    ? sectionLabel(selected.sectionId)
+                    : selected.type === "heading"
+                      ? "标题组件"
+                      : "文本容器"}
                 </h2>
                 <div className="flex gap-1">
                   <ToolBtn label="上移" onClick={() => moveBlock(selected.id, -1)}><ArrowUp className="size-4" aria-hidden /></ToolBtn>
@@ -477,6 +487,17 @@ function LayoutEditor() {
               </div>
 
               <div className="flex flex-col gap-3">
+                {selected.type === "heading" ? (
+                  <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                    标题文字
+                    <input
+                      value={selected.markdown ?? ""}
+                      onChange={(e) => patchBlock(selected.id, { markdown: e.target.value })}
+                      className="h-9 rounded-md border border-input bg-card px-2 text-sm"
+                    />
+                  </label>
+                ) : null}
+
                 <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
                   宽度
                   <div className="flex gap-1.5">
@@ -493,6 +514,53 @@ function LayoutEditor() {
                     ))}
                   </div>
                 </label>
+
+                <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                  与版式的关系
+                  <div className="flex gap-1.5">
+                    {([["template", "跟随版式"], ["free", "通用组件"]] as const).map(([v, l]) => (
+                      <button
+                        key={v}
+                        onClick={() => patchBlock(selected.id, { binding: v })}
+                        className={`h-9 flex-1 rounded-md text-sm transition-colors ${
+                          (selected.binding ?? "template") === v ? "bg-primary text-primary-foreground" : "bg-muted hover:opacity-80"
+                        }`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+
+                {(selected.binding === "free" || selected.type === "heading") && (
+                  <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                    对齐
+                    <div className="flex gap-1.5">
+                      {([["left", "居左"], ["center", "居中"], ["right", "居右"]] as const).map(([v, l]) => (
+                        <button
+                          key={v}
+                          onClick={() => patchBlock(selected.id, { align: v })}
+                          className={`h-9 flex-1 rounded-md text-sm transition-colors ${
+                            (selected.align ?? (selected.type === "heading" ? "center" : "left")) === v ? "bg-primary text-primary-foreground" : "bg-muted hover:opacity-80"
+                          }`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                )}
+
+                {selected.type === "section" && (
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={!!selected.hero}
+                      onChange={(e) => patchBlock(selected.id, { hero: e.target.checked })}
+                    />
+                    页头模式（隐藏章节标题，姓名居中大字，联系方式横排）
+                  </label>
+                )}
 
                 {selected.type === "section" && (
                   <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
@@ -717,11 +785,27 @@ function LayoutEditor() {
                       id: `txt-${Date.now()}`, type: "text", sectionId: null,
                       markdown: "补充说明或自定义内容…", width: 12, hidden: false,
                       card: false, tint: null, titleOverride: null, size: null,
+                      binding: null, align: null, hero: null,
                     });
                   })
                 }
               >
                 <Plus data-icon="inline-start" /> 文本
+              </Button>
+              <Button
+                size="sm" variant="ghost"
+                onClick={() =>
+                  update((d) => {
+                    d.blocks.push({
+                      id: `head-${Date.now()}`, type: "heading", sectionId: null,
+                      markdown: "标题", width: 12, hidden: false,
+                      card: false, tint: null, titleOverride: null, size: null,
+                      binding: null, align: "center", hero: null,
+                    });
+                  })
+                }
+              >
+                <Plus data-icon="inline-start" /> 标题
               </Button>
             </div>
             <p className="mb-2 text-xs text-muted-foreground">拖 ≡ 排序；点行选中后在上方编辑。</p>
@@ -753,7 +837,7 @@ function LayoutEditor() {
                         d.blocks.push({
                           id: `blk-${id}`, type: "section", sectionId: id, markdown: null,
                           width: 12, hidden: false, card: false, tint: null,
-                          titleOverride: null, size: null,
+                          titleOverride: null, size: null, binding: null, align: null, hero: null,
                         });
                       })
                     }
@@ -794,7 +878,7 @@ function LayoutEditor() {
                 >
                   <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
                     <span>
-                      {editing.sectionId ? `章节：${sectionLabel(editing.sectionId)}` : "文本容器"}
+                      {editing.sectionId ? `${sectionLabel(editing.sectionId)} · 正文` : editing.blockId.startsWith("head-") ? "标题组件" : "文本容器"}
                       {mode === "source" && " · 从右侧源文件复制粘贴到此处"}
                     </span>
                     <span>Esc 取消</span>
@@ -938,7 +1022,9 @@ function SortableRow({
   const label =
     block.type === "section"
       ? (block.titleOverride?.trim() || sectionLabel(block.sectionId))
-      : `文本：${(block.markdown ?? "").slice(0, 14) || "空"}`;
+      : block.type === "heading"
+        ? `标题：${(block.markdown ?? "").slice(0, 14) || "空"}`
+        : `文本：${(block.markdown ?? "").slice(0, 14) || "空"}`;
   return (
     <li
       ref={setNodeRef}

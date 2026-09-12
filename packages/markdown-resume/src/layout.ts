@@ -21,7 +21,7 @@ export interface PageSetup {
 
 export interface LayoutBlock {
   id: string;
-  type: "section" | "text";
+  type: "section" | "text" | "heading";
   sectionId: string | null;
   markdown: string | null;
   width: 12 | 8 | 6 | 4;
@@ -31,6 +31,12 @@ export interface LayoutBlock {
   /** None=用章节原标题；""=隐藏标题；其余=替换标题文本 */
   titleOverride: string | null;
   size: "small" | "normal" | "large" | null;
+  /** 与版式绑定：template（默认）| free（通用组件，独立基础排版） */
+  binding: "template" | "free" | null;
+  /** 对齐：left | center | right（free/heading/hero 组件生效） */
+  align: "left" | "center" | "right" | null;
+  /** 页头模式：隐藏章节标题、首行大字、首个列表横排 */
+  hero: boolean | null;
 }
 
 export interface LayoutTheme {
@@ -77,6 +83,9 @@ export function defaultLayoutFor(markdown: string): LayoutConfig {
       tint: null,
       titleOverride: null,
       size: null,
+      binding: null,
+      align: null,
+      hero: s.id === "basic" ? true : null,
     })),
     theme: defaultTheme(),
   };
@@ -194,6 +203,41 @@ ${canvas ? ".jsw-canvas" : "body"} {
 }
 .heading-dot .jsw-b.card { padding-left: 16px; }
 .heading-plain .jsw-b h2 { font-weight: 700; }
+
+/* free（通用组件）：脱离版式装饰，保留基础排版 */
+.heading-bar .jsw-b.free h2::before { content: none; }
+.heading-dot .jsw-b.free { border-left: none; padding-left: 0; }
+.heading-dot .jsw-b.free h2::before { content: none; box-shadow: none; margin-left: 0; width: 0; }
+.jsw-b.ta-left { text-align: left; }
+.jsw-b.ta-center { text-align: center; }
+.jsw-b.ta-right { text-align: right; }
+.jsw-b.ta-center ul { list-style: none; padding-left: 0; }
+.jsw-b.ta-center li { display: inline; margin: 0 .6em; }
+
+/* hero（页头模式）：隐藏章节标题，首行大字，首个列表横排 */
+.jsw-b.hero h2 { display: none; }
+.jsw-b.hero h1 { font-size: 1.9em; margin: 0 0 .15em; }
+.jsw-b.hero ul { list-style: none; padding-left: 0; margin: .2em 0; }
+.jsw-b.hero li { display: inline; margin: 0 .9em; font-size: .92em; color: #4b5563; }
+
+/* heading（纯标题组件） */
+.jsw-b.jsw-heading h1,
+.jsw-b.jsw-heading h2,
+.jsw-b.jsw-heading p { margin: 0; font-size: 1.5em; font-weight: 700; color: #111827; }
+.jsw-b.jsw-heading.s-sm > * { font-size: 1.2em; }
+.jsw-b.jsw-heading.s-lg > * { font-size: 1.9em; }
+
+/* 时间线连续轴线：单栏版式下贯穿整页 */
+.jsw-grid.axis { position: relative; }
+.jsw-grid.axis::before {
+  content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px;
+  width: 2px; border-radius: 1px;
+  background: color-mix(in srgb, var(--jsw-primary) 30%, #fff);
+}
+.jsw-grid.axis .jsw-b { border-left: none; padding-left: 22px; }
+.jsw-grid.axis .jsw-b.hero,
+.jsw-grid.axis .jsw-b.free,
+.jsw-grid.axis .jsw-b.jsw-heading { padding-left: 0; }
 .jsw-b h3 { font-size: 1em; margin: .7em 0 .1em; font-weight: 600; }
 .jsw-b p { margin: .25em 0; }
 .jsw-b ul { margin: .25em 0; padding-left: 1.2em; }
@@ -254,8 +298,13 @@ export function renderLayoutDocument(
   });
 
   const placed = new Set<string>();
-  const blockHtml = layout.blocks
-    .filter((b) => !b.hidden)
+  const visible = layout.blocks.filter((b) => !b.hidden);
+  // 时间线版式且全部可见块都是整行时，启用贯穿轴线（连线连续）
+  const axis =
+    (layout.theme.heading ?? "bar") === "dot" &&
+    visible.length > 0 &&
+    visible.every((b) => b.width === 12);
+  const blockHtml = visible
     .map((b) => {
       let inner = "";
       if (b.type === "section") {
@@ -263,6 +312,8 @@ export function renderLayoutDocument(
         placed.add(sid);
         const md = sectionMd.get(sid);
         inner = md !== undefined ? renderSectionHtml(md) : `<p style="color:#9ca3af">（章节 ${sid} 不存在）</p>`;
+      } else if (b.type === "heading") {
+        inner = `<h2>${escapeHtmlText(b.markdown ?? "")}</h2>`;
       } else {
         inner = renderMarkdownSafe(b.markdown ?? "");
       }
@@ -273,15 +324,19 @@ export function renderLayoutDocument(
         b.size === "small" ? "s-sm" : b.size === "large" ? "s-lg" : "",
         b.card ? "card" : "",
         b.card && b.tint && TINTS[b.tint] ? `tint-${b.tint}` : "",
+        b.binding === "free" ? "free" : "",
+        b.type === "heading" ? "jsw-heading" : "",
+        b.hero ? "hero" : "",
+        b.align === "center" ? "ta-center" : b.align === "right" ? "ta-right" : "",
       ].filter(Boolean).join(" ");
       let blockInner = inner;
-      if (b.titleOverride !== null && b.titleOverride !== undefined) {
+      if (b.type !== "heading" && b.titleOverride !== null && b.titleOverride !== undefined) {
         if (b.titleOverride.trim() === "") {
           blockInner = blockInner.replace(/<h2[\s\S]*?<\/h2>/, "");
         } else {
           blockInner = blockInner.replace(
             /<h2([\s\S]*?)>([\s\S]*?)<\/h2>/,
-            `<h2$1>${b.titleOverride}</h2>`,
+            `<h2$1>${escapeHtmlText(b.titleOverride)}</h2>`,
           );
         }
       }
@@ -309,7 +364,7 @@ export function renderLayoutDocument(
 <body class="heading-${layout.theme.heading ?? "bar"}">
 <div class="jsw-page">
 ${headerHtml}
-<div class="jsw-grid">
+<div class="jsw-grid${axis ? " axis" : ""}">
 ${blockHtml}
 </div>
 ${footerHtml}
@@ -349,6 +404,38 @@ export function replaceSectionMarkdown(
   const next = markdown.indexOf("<!-- resume-section ", after);
   const end = next === -1 ? markdown.length : next;
   return markdown.slice(0, after) + "\n" + newBody.trim() + "\n\n" + markdown.slice(end);
+}
+
+function escapeHtmlText(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** 分离章节的标题行与正文（编辑卡分开编辑用）。 */
+export function splitSectionHead(md: string): { title: string; body: string } {
+  const m = /^(#{1,6} .*)\n([\s\S]*)$/.exec(md.trimStart());
+  if (!m) return { title: "", body: md };
+  return { title: m[1].replace(/^#+\s+/, "").trim(), body: m[2] };
+}
+
+/** 只替换章节正文，标题行保持原样。 */
+export function replaceSectionBody(markdown: string, sectionId: string, body: string): string {
+  const marker = `<!-- resume-section id="${sectionId}" -->`;
+  const idx = markdown.indexOf(marker);
+  if (idx === -1) return markdown;
+  const after = idx + marker.length;
+  const next = markdown.indexOf("<!-- resume-section ", after);
+  const end = next === -1 ? markdown.length : next;
+  const seg = markdown.slice(after, end);
+  const m = /^(\s*)(#{1,6} .*\n)/.exec(seg);
+  const headLine = m ? m[2] : "";
+  return (
+    markdown.slice(0, after) +
+    "\n" +
+    (headLine ? headLine : "") +
+    body.trim() +
+    "\n\n" +
+    markdown.slice(end)
+  );
 }
 
 /** 打印版 @page 规则（PDF 导出注入，spec §9）。 */
