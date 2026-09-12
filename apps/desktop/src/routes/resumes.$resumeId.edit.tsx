@@ -9,6 +9,8 @@ import { indentWithTab } from "@codemirror/commands";
 import { api } from "../lib/constants";
 import { parseResumeDocument, renderSectionHtml, splitSections } from "@jsw/markdown-resume";
 import { renderTemplate, pageCss, TemplateManifestSchema } from "@jsw/template-engine";
+import { inlineTemplateCss } from "../lib/mock-resume";
+import { A4Preview } from "../components/A4Preview";
 import { renderResumeForTemplate } from "@jsw/markdown-resume";
 
 export const Route = createFileRoute("/resumes/$resumeId/edit")({ component: ResumeEditor });
@@ -131,15 +133,41 @@ function ResumeEditor() {
   });
 
   // 预览 HTML：最后一次有效 AST
+  // 预览跟随所选模板实时渲染；模板缺失或文档无效时回退裸 Markdown（最后一次有效内容）
   const previewHtml = useMemo(() => {
     if (!markdown) return "";
-    const p = parseResumeDocument(markdown);
-    if (!p.ok) {
-      // 用最后一次有效内容渲染
-      return renderSectionsToHtml(lastValid);
+    const source = parseResumeDocument(markdown).ok ? markdown : lastValid;
+    if (!source) return "";
+
+    if (assets.data) {
+      try {
+        const manifest = TemplateManifestSchema.parse(JSON.parse(assets.data.manifest_json));
+        const rendered = renderResumeForTemplate(source);
+        if (rendered.ok) {
+          const result = renderTemplate({
+            manifest,
+            templateHtml: inlineTemplateCss(assets.data.template_html, assets.data.style_css),
+            context: {
+              document: {
+                title: rendered.frontmatter?.title ?? content.data?.resume.title ?? "",
+                locale: rendered.frontmatter?.locale ?? "zh-CN",
+              },
+              resume: { bodyHtml: rendered.bodyHtml },
+              sections: rendered.sectionsHtml,
+            },
+          });
+          if (result.ok && result.html) return result.html;
+        }
+      } catch {
+        // 落入降级路径
+      }
     }
-    return renderSectionsToHtml(markdown);
-  }, [markdown, lastValid]);
+    return `<!doctype html><html><head><meta charset="utf-8"><style>
+      body{margin:0;font-family:-apple-system,"PingFang SC",sans-serif;color:#1f2937;font-size:14px;line-height:1.55;padding:40px 44px;}
+      h1{font-size:19pt;margin:0 0 8pt}h2{font-size:12pt;margin:12pt 0 4pt;border-bottom:1pt solid #333;padding-bottom:2pt}
+      h3{font-size:10.5pt;margin:8pt 0 2pt}ul{margin:2pt 0;padding-left:14pt}a{color:#1d4ed8}
+    </style></head><body>${renderSectionsToHtml(source)}</body></html>`;
+  }, [markdown, lastValid, assets.data, content.data]);
 
   useEffect(() => {
     if (parsed?.ok) setLastValid(markdown!);
@@ -200,8 +228,8 @@ function ResumeEditor() {
 
       <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
         <div ref={editorRef} className="min-h-0 overflow-auto rounded-lg border border-border bg-card p-2 [&_.cm-editor]:h-full [&_.cm-scroller]:font-mono" style={{ fontSize: 15 }} />
-        <div className="min-h-0 overflow-auto rounded-lg border border-border bg-card p-6">
-          <div className="resume-preview" dangerouslySetInnerHTML={{ __html: previewHtml }} />
+        <div className="min-h-0 overflow-auto rounded-lg border border-border bg-card p-4">
+          <A4Preview html={previewHtml} title="简历预览" className="mx-auto max-w-full rounded shadow-sm" />
         </div>
       </div>
     </div>

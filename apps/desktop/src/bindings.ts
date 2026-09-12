@@ -479,7 +479,15 @@ card: boolean;
 /**
  * 浅色着色（rose/blue/indigo/…，None 为透明）
  */
-tint: string | null }
+tint: string | null; 
+/**
+ * 自定义标题：None 用章节原文；Some("") 隐藏标题；其他为替换文本
+ */
+titleOverride: string | null; 
+/**
+ * 字号档位："small" | "normal" | "large"（None 为 normal）
+ */
+size: string | null }
 export type LayoutConfig = { page: PageSetup; blocks: LayoutBlock[]; theme: LayoutTheme }
 export type LayoutTheme = { primary: string; 
 /**
