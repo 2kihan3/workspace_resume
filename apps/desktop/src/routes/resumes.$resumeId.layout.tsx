@@ -4,8 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
+  DndContext, PointerSensor, useSensor, useSensors,
+} from "@dnd-kit/core";
+import type { DragEndEvent } from "@dnd-kit/core";
+import {
+  SortableContext, useSortable, verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Copy, Eye, EyeOff,
-  FileText, LayoutGrid, Plus, Save, Trash2,
+  FileText, GripVertical, LayoutGrid, Plus, Save, Trash2,
 } from "lucide-react";
 import { api, type LayoutConfig, type LayoutBlock } from "../lib/constants";
 import {
@@ -23,6 +31,11 @@ const PRESET_COLORS = [
   "#0f766e", "#4f46e5", "#e11d48", "#ea580c",
   "#2563eb", "#7c3aed", "#0d9488", "#334155",
 ];
+
+const TINT_OPTIONS = [
+  ["rose", "#fecdd3"], ["blue", "#bfdbfe"], ["indigo", "#c7d2fe"],
+  ["teal", "#99f6e4"], ["amber", "#fde68a"], ["", "#ffffff"],
+] as const;
 
 function LayoutEditor() {
   const { resumeId } = Route.useParams();
@@ -45,6 +58,8 @@ function LayoutEditor() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
 
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+
   useEffect(() => {
     (async () => {
       if (!content.data || markdown !== null) return;
@@ -54,13 +69,11 @@ function LayoutEditor() {
     })();
   }, [content.data, markdown, resumeId]);
 
-  // 画布渲染
   const canvas = useMemo(
     () => (markdown && layout ? renderLayoutCanvas(markdown, layout) : null),
     [markdown, layout],
   );
 
-  // 章节内容映射（就地编辑用）
   const sectionMd = useMemo(() => {
     const map = new Map<string, string>();
     if (!markdown) return map;
@@ -78,6 +91,13 @@ function LayoutEditor() {
     });
     setDirty(true);
   }, []);
+
+  const patchBlock = useCallback((id: string, patch: Partial<LayoutBlock>) => {
+    update((d) => {
+      const b = d.blocks.find((x) => x.id === id);
+      if (b) Object.assign(b, patch);
+    });
+  }, [update]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -113,15 +133,10 @@ function LayoutEditor() {
     onError: (e) => toast.error(`导出失败：${(e as Error).message}`),
   });
 
-  // ── 画布交互：事件委托（点击选中 / 双击编辑 / 原生拖拽排序）──
+  // ── 画布交互：点击选中 / 双击编辑 / 选中容器可拖拽排序 ──
   useEffect(() => {
     const root = canvasRef.current;
     if (!root || !canvas?.content) return;
-
-    // 容器可拖拽（编辑态文本框除外）
-    root.querySelectorAll<HTMLElement>("[data-block-id]").forEach((el) => {
-      el.draggable = true;
-    });
 
     let dragId: string | null = null;
 
@@ -149,7 +164,12 @@ function LayoutEditor() {
     const onDragStart = (e: DragEvent) => {
       const target = (e.target as HTMLElement).closest("[data-block-id]") as HTMLElement | null;
       if (!target) return;
-      dragId = target.getAttribute("data-block-id") ?? null;
+      // 仅选中的容器可拖拽（未选中时保留文本选择）
+      if (target.getAttribute("data-block-id") !== selectedId) {
+        e.preventDefault();
+        return;
+      }
+      dragId = selectedId;
       if (dragId) e.dataTransfer?.setData("text/plain", dragId);
     };
 
@@ -188,17 +208,19 @@ function LayoutEditor() {
       root.removeEventListener("dragover", onDragOver);
       root.removeEventListener("drop", onDrop);
     };
-  }, [canvas?.content, layout, sectionMd, update]);
+  }, [canvas?.content, layout, sectionMd, update, selectedId]);
 
-  // 选中高亮 + 页数估算
+  // 选中高亮 + 拖拽属性 + 页数估算
   useEffect(() => {
     const root = canvasRef.current;
     if (!root) return;
     root.querySelectorAll<HTMLElement>("[data-block-id]").forEach((el) => {
-      const isSel = el.getAttribute("data-block-id") === selectedId;
+      const id = el.getAttribute("data-block-id");
+      const isSel = id === selectedId;
       el.style.outline = isSel ? "2px solid #0f766e" : "";
       el.style.outlineOffset = isSel ? "2px" : "";
-      el.style.cursor = "grab";
+      el.draggable = isSel;
+      el.style.cursor = isSel ? "grab" : "pointer";
     });
     const page = root.querySelector(".jsw-page");
     if (page) setPages(Math.max(1, Math.ceil(page.scrollHeight / 1122)));
@@ -215,7 +237,6 @@ function LayoutEditor() {
     return () => ro.disconnect();
   }, []);
 
-  // 编辑框定位：编辑态 block 的屏幕位置
   const editPos = useMemo(() => {
     if (!editing || !canvasRef.current) return null;
     const el = canvasRef.current.querySelector<HTMLElement>(
@@ -246,7 +267,16 @@ function LayoutEditor() {
     setDirty(true);
   };
 
-  // 源文件加载（方案 B）
+  const startEdit = (block: LayoutBlock) => {
+    if (block.type === "section") {
+      setEditText(sectionMd.get(block.sectionId ?? "") ?? "");
+      setEditing({ blockId: block.id, sectionId: block.sectionId });
+    } else {
+      setEditText(block.markdown ?? "");
+      setEditing({ blockId: block.id, sectionId: null });
+    }
+  };
+
   const loadSourceFile = async () => {
     const path = await openFileDialog({
       multiple: false,
@@ -290,6 +320,7 @@ function LayoutEditor() {
         const base: LayoutBlock = {
           id: `blk-${id}`, type: "section", sectionId: id, markdown: null,
           width: 12, hidden: false, card: false, tint: null,
+          titleOverride: null, size: null,
         };
         if (preset === "sidebar") {
           if (["basic", "skills", "education"].includes(id)) return { ...base, width: 4 };
@@ -303,7 +334,20 @@ function LayoutEditor() {
       };
       draft.blocks = all.map(mk);
     });
-    toast.success("已应用预设，可继续微调");
+    setSelectedId(null);
+    toast.success("已应用预设，可继续微调单个容器");
+  };
+
+  const onListDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    update((draft) => {
+      const from = draft.blocks.findIndex((b) => b.id === active.id);
+      const to = draft.blocks.findIndex((b) => b.id === over.id);
+      if (from < 0 || to < 0) return;
+      const [moved] = draft.blocks.splice(from, 1);
+      draft.blocks.splice(to, 0, moved);
+    });
   };
 
   if (!markdown || !layout) {
@@ -330,7 +374,6 @@ function LayoutEditor() {
         <span className={`text-sm ${dirty ? "text-amber-600" : "text-muted-foreground"}`}>
           {dirty ? "未保存" : "已保存"} · 约 {pages} 页
         </span>
-        {/* 编辑模式二选一（A/B 验证） */}
         <div role="radiogroup" aria-label="编辑模式" className="flex overflow-hidden rounded-md border border-input">
           {(["canvas", "source"] as const).map((m) => (
             <button
@@ -359,7 +402,151 @@ function LayoutEditor() {
 
       <div className="flex min-h-0 flex-1 gap-3">
         {/* 左面板 */}
-        <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-auto pr-1">
+        <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto pr-1">
+          {/* 整体布局（全局操作，置顶） */}
+          <section className="rounded-xl border border-border bg-card p-4">
+            <h2 className="mb-1 text-sm font-semibold">整体布局</h2>
+            <p className="mb-3 text-xs text-muted-foreground">一键重排全部容器，之后再逐个微调。</p>
+            <div className="grid grid-cols-3 gap-2">
+              <PresetBtn label="单栏" desc="通栏排布" onClick={() => applyPreset("single")} />
+              <PresetBtn label="侧栏" desc="左窄右宽" onClick={() => applyPreset("sidebar")} />
+              <PresetBtn label="卡片" desc="彩色圆角" onClick={() => applyPreset("cards")} />
+            </div>
+          </section>
+
+          {/* 选中容器编辑卡 */}
+          {selected ? (
+            <section className="rounded-xl border border-primary/40 bg-card p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold">
+                  编辑 · {selected.type === "section" ? sectionLabel(selected.sectionId) : "文本容器"}
+                </h2>
+                <div className="flex gap-1">
+                  <ToolBtn label="上移" onClick={() => moveBlock(selected.id, -1)}><ArrowUp className="size-4" aria-hidden /></ToolBtn>
+                  <ToolBtn label="下移" onClick={() => moveBlock(selected.id, 1)}><ArrowDown className="size-4" aria-hidden /></ToolBtn>
+                  <ToolBtn
+                    label={selected.hidden ? "显示" : "隐藏"}
+                    onClick={() => patchBlock(selected.id, { hidden: !selected.hidden })}
+                  >
+                    {selected.hidden ? <EyeOff className="size-4" aria-hidden /> : <Eye className="size-4" aria-hidden />}
+                  </ToolBtn>
+                  <ToolBtn
+                    label="删除"
+                    onClick={() => {
+                      update((d) => { d.blocks = d.blocks.filter((x) => x.id !== selected.id); });
+                      setSelectedId(null);
+                    }}
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </ToolBtn>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                  宽度
+                  <div className="flex gap-1.5">
+                    {([12, 8, 6, 4] as const).map((w) => (
+                      <button
+                        key={w}
+                        onClick={() => patchBlock(selected.id, { width: w })}
+                        className={`h-9 flex-1 rounded-md text-sm transition-colors ${
+                          selected.width === w ? "bg-primary text-primary-foreground" : "bg-muted hover:opacity-80"
+                        }`}
+                      >
+                        {w === 12 ? "整行" : `${w}/12`}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+
+                {selected.type === "section" && (
+                  <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                    标题（改写显示名；清空并保存 = 隐藏标题）
+                    <div className="flex gap-1.5">
+                      <input
+                        value={selected.titleOverride ?? ""}
+                        placeholder={sectionTitle(sectionMd.get(selected.sectionId ?? "") ?? "")}
+                        onChange={(e) => patchBlock(selected.id, { titleOverride: e.target.value })}
+                        className="h-9 flex-1 rounded-md border border-input bg-card px-2 text-sm"
+                      />
+                      {selected.titleOverride !== null && (
+                        <button
+                          onClick={() => patchBlock(selected.id, { titleOverride: null })}
+                          className="shrink-0 rounded-md px-2 text-xs text-primary hover:underline"
+                        >
+                          用原文
+                        </button>
+                      )}
+                    </div>
+                  </label>
+                )}
+
+                <label className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                  字号
+                  <div className="flex gap-1.5">
+                    {([["small", "小"], ["normal", "标准"], ["large", "大"]] as const).map(([v, l]) => (
+                      <button
+                        key={v}
+                        onClick={() => patchBlock(selected.id, { size: v })}
+                        className={`h-9 flex-1 rounded-md text-sm transition-colors ${
+                          (selected.size ?? "normal") === v ? "bg-primary text-primary-foreground" : "bg-muted hover:opacity-80"
+                        }`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </label>
+
+                <div className="flex items-center justify-between">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox" checked={selected.card}
+                      onChange={(e) => patchBlock(selected.id, { card: e.target.checked })}
+                    />
+                    卡片化（圆角浅底）
+                  </label>
+                  <ToolBtn
+                    label="卡片化"
+                    active={selected.card}
+                    onClick={() => patchBlock(selected.id, { card: !selected.card })}
+                  >
+                    <LayoutGrid className="size-4" aria-hidden />
+                  </ToolBtn>
+                </div>
+
+                {selected.card && (
+                  <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
+                    卡片底色
+                    <div className="flex gap-1.5">
+                      {TINT_OPTIONS.map(([name, color]) => (
+                        <button
+                          key={name || "none"}
+                          aria-label={name ? `底色 ${name}` : "无底色"}
+                          onClick={() => patchBlock(selected.id, { tint: name || null })}
+                          className={`size-7 rounded-md border-2 transition-transform hover:scale-110 ${
+                            (selected.tint ?? "") === name ? "border-foreground" : "border-border"
+                          }`}
+                          style={{ background: color }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <Button size="sm" variant="outline" onClick={() => startEdit(selected)}>
+                  编辑内容
+                </Button>
+              </div>
+            </section>
+          ) : (
+            <section className="rounded-xl border border-dashed border-border bg-card/60 p-4 text-sm text-muted-foreground">
+              点击画布或下方列表选中一个容器，在这里调它的宽度、标题、字号和样式。
+            </section>
+          )}
+
+          {/* 页面设置 */}
           <section className="rounded-xl border border-border bg-card p-4">
             <h2 className="mb-3 text-sm font-semibold">页面</h2>
             <div className="grid grid-cols-2 gap-2">
@@ -420,6 +607,7 @@ function LayoutEditor() {
             )}
           </section>
 
+          {/* 主题 */}
           <section className="rounded-xl border border-border bg-card p-4">
             <h2 className="mb-3 text-sm font-semibold">主题</h2>
             <div className="flex flex-wrap gap-2">
@@ -470,83 +658,43 @@ function LayoutEditor() {
             </div>
           </section>
 
+          {/* 容器列表（拖拽排序） */}
           <section className="rounded-xl border border-border bg-card p-4">
-            <h2 className="mb-3 text-sm font-semibold">容器（{layout.blocks.length}）</h2>
-            <div className="flex flex-col gap-1">
-              {layout.blocks.map((b) => {
-                const label =
-                  b.type === "section" ? (b.sectionId ?? "?") : `文本：${(b.markdown ?? "").slice(0, 12) || "空"}`;
-                return (
-                  <div
-                    key={b.id}
-                    onClick={() => setSelectedId(b.id)}
-                    className={`flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                      selectedId === b.id ? "bg-accent text-accent-foreground" : "hover:bg-muted"
-                    } ${b.hidden ? "opacity-40" : ""}`}
-                  >
-                    <span className="flex-1 truncate">{label}</span>
-                    <select
-                      value={b.width}
-                      onChange={(e) =>
-                        update((d) => {
-                          const t = d.blocks.find((x) => x.id === b.id);
-                          if (t) t.width = Number(e.target.value) as LayoutBlock["width"];
-                        })
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-7 rounded border border-input bg-card px-1 text-xs"
-                      aria-label="宽度"
-                    >
-                      {[12, 8, 6, 4].map((w) => <option key={w} value={w}>{w}/12</option>)}
-                    </select>
-                    <button
-                      aria-label={b.card ? "取消卡片" : "卡片化"}
-                      onClick={(e) => { e.stopPropagation(); update((d) => { const t = d.blocks.find((x) => x.id === b.id); if (t) t.card = !t.card; }); }}
-                      className={`grid size-7 place-items-center rounded hover:bg-muted ${b.card ? "text-primary" : "text-muted-foreground"}`}
-                    >
-                      <LayoutGrid className="size-3.5" aria-hidden />
-                    </button>
-                    <button
-                      aria-label={b.hidden ? "显示" : "隐藏"}
-                      onClick={(e) => { e.stopPropagation(); update((d) => { const t = d.blocks.find((x) => x.id === b.id); if (t) t.hidden = !t.hidden; }); }}
-                      className="grid size-7 place-items-center rounded text-muted-foreground hover:bg-muted"
-                    >
-                      {b.hidden ? <EyeOff className="size-3.5" aria-hidden /> : <Eye className="size-3.5" aria-hidden />}
-                    </button>
-                    <button
-                      aria-label="删除容器"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        update((d) => { d.blocks = d.blocks.filter((x) => x.id !== b.id); });
-                        if (selectedId === b.id) setSelectedId(null);
-                      }}
-                      className="grid size-7 place-items-center rounded text-destructive hover:bg-destructive/10"
-                    >
-                      <Trash2 className="size-3.5" aria-hidden />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-2 flex gap-2">
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="text-sm font-semibold">容器（{layout.blocks.length}）</h2>
               <Button
-                size="sm" variant="outline"
+                size="sm" variant="ghost"
                 onClick={() =>
                   update((d) => {
                     d.blocks.push({
                       id: `txt-${Date.now()}`, type: "text", sectionId: null,
                       markdown: "补充说明或自定义内容…", width: 12, hidden: false,
-                      card: false, tint: null,
+                      card: false, tint: null, titleOverride: null, size: null,
                     });
                   })
                 }
               >
-                <Plus data-icon="inline-start" /> 文本容器
+                <Plus data-icon="inline-start" /> 文本
               </Button>
-              <Button size="sm" variant="outline" onClick={() => applyPreset("single")}>单栏</Button>
-              <Button size="sm" variant="outline" onClick={() => applyPreset("sidebar")}>侧栏</Button>
-              <Button size="sm" variant="outline" onClick={() => applyPreset("cards")}>卡片</Button>
             </div>
+            <p className="mb-2 text-xs text-muted-foreground">拖 ≡ 排序；点行选中后在上方编辑。</p>
+            <DndContext sensors={sensors} onDragEnd={onListDragEnd}>
+              <SortableContext
+                items={layout.blocks.map((b) => b.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <ol className="flex flex-col gap-1">
+                  {layout.blocks.map((b) => (
+                    <SortableRow
+                      key={b.id}
+                      block={b}
+                      selected={selectedId === b.id}
+                      onSelect={() => setSelectedId(b.id)}
+                    />
+                  ))}
+                </ol>
+              </SortableContext>
+            </DndContext>
             {missing.length > 0 && (
               <div className="mt-3 rounded-md bg-amber-50 p-2 text-xs text-amber-700 dark:bg-status-amber/40 dark:text-amber-300">
                 未摆放：{missing.join("、")}
@@ -558,6 +706,7 @@ function LayoutEditor() {
                         d.blocks.push({
                           id: `blk-${id}`, type: "section", sectionId: id, markdown: null,
                           width: 12, hidden: false, card: false, tint: null,
+                          titleOverride: null, size: null,
                         });
                       })
                     }
@@ -579,11 +728,7 @@ function LayoutEditor() {
           <div
             style={{ transform: `scale(${zoom})`, transformOrigin: "top center", width: 794, margin: "0 auto" }}
           >
-            <div
-              ref={canvasRef}
-              className="jsw-canvas relative"
-              style={{ width: 794 }}
-            >
+            <div ref={canvasRef} className="jsw-canvas relative" style={{ width: 794 }}>
               {canvas?.ok && (
                 <>
                   <style>{canvas.css}</style>
@@ -593,7 +738,6 @@ function LayoutEditor() {
                   />
                 </>
               )}
-              {/* 就地编辑（方案 A：双击容器；方案 B：双击后从右抽屉粘贴） */}
               {editing && editPos && (
                 <div
                   className="absolute z-20 rounded-lg border border-border bg-card p-3 shadow-xl"
@@ -603,8 +747,8 @@ function LayoutEditor() {
                 >
                   <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
                     <span>
-                      {editing.sectionId ? `章节：${editing.sectionId}` : "文本容器"}
-                      {mode === "source" && " · 从右侧源文件复制内容粘贴到此处"}
+                      {editing.sectionId ? `章节：${sectionLabel(editing.sectionId)}` : "文本容器"}
+                      {mode === "source" && " · 从右侧源文件复制粘贴到此处"}
                     </span>
                     <span>Esc 取消</span>
                   </div>
@@ -627,30 +771,6 @@ function LayoutEditor() {
               )}
             </div>
           </div>
-
-          {/* 选中容器的浮动操作条 */}
-          {selected && (
-            <div className="pointer-events-none sticky top-0 z-10 flex justify-center">
-              <div className="pointer-events-auto flex items-center gap-1 rounded-lg border border-border bg-card p-1 shadow-md">
-                <span className="px-2 text-xs text-muted-foreground">
-                  {selected.type === "section" ? selected.sectionId : "文本容器"}
-                </span>
-                <ToolBtn label="上移" onClick={() => moveBlock(selected.id, -1)}><ArrowUp className="size-4" aria-hidden /></ToolBtn>
-                <ToolBtn label="下移" onClick={() => moveBlock(selected.id, 1)}><ArrowDown className="size-4" aria-hidden /></ToolBtn>
-                <span className="mx-1 h-4 w-px bg-border" />
-                {[12, 8, 6, 4].map((w) => (
-                  <ToolBtn
-                    key={w}
-                    label={`宽 ${w}`}
-                    active={selected.width === w}
-                    onClick={() => update((d) => { const t = d.blocks.find((x) => x.id === selected.id); if (t) t.width = w as LayoutBlock["width"]; })}
-                  >
-                    <span className="text-xs">{w}</span>
-                  </ToolBtn>
-                ))}
-              </div>
-            </div>
-          )}
 
           {!canvas?.ok && (
             <div className="p-8 text-center text-sm text-muted-foreground">
@@ -696,9 +816,9 @@ function LayoutEditor() {
             </div>
             <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
               {sourceText ? (
-                <pre
-                  className="select-text whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-xs leading-relaxed"
-                >{sourceText}</pre>
+                <pre className="select-text whitespace-pre-wrap rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">
+                  {sourceText}
+                </pre>
               ) : (
                 <p className="p-3 text-sm text-muted-foreground">
                   选一个 Markdown 源文件，从里面复制需要的片段，双击画布上的容器粘贴进去。
@@ -721,6 +841,73 @@ function LayoutEditor() {
   }
 }
 
+function sectionTitle(md: string): string {
+  const m = /^\s*#{1,3}\s+(.+)$/m.exec(md);
+  return m ? m[1].trim() : "";
+}
+
+function sectionLabel(id: string | null): string {
+  const map: Record<string, string> = {
+    basic: "基本信息", experience: "工作经历", projects: "项目经历",
+    education: "教育经历", skills: "技能",
+  };
+  return (id && map[id]) || id || "?";
+}
+
+function PresetBtn({ label, desc, onClick }: { label: string; desc: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-0.5 rounded-lg border border-input bg-card px-2 py-2.5 text-sm transition-colors hover:border-ring hover:bg-accent"
+    >
+      <span className="font-medium">{label}</span>
+      <span className="text-xs text-muted-foreground">{desc}</span>
+    </button>
+  );
+}
+
+function SortableRow({
+  block,
+  selected,
+  onSelect,
+}: {
+  block: LayoutBlock;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: block.id,
+  });
+  const label =
+    block.type === "section"
+      ? (block.titleOverride?.trim() || sectionLabel(block.sectionId))
+      : `文本：${(block.markdown ?? "").slice(0, 14) || "空"}`;
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-sm transition-colors ${
+        selected ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+      } ${block.hidden ? "opacity-40" : ""} ${isDragging ? "opacity-60 shadow-md ring-1 ring-ring" : ""}`}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        aria-label="拖动排序"
+        className="grid size-7 cursor-grab place-items-center rounded text-muted-foreground hover:bg-muted active:cursor-grabbing"
+      >
+        <GripVertical className="size-4" aria-hidden />
+      </button>
+      <button onClick={onSelect} className="flex-1 truncate text-left" title={label}>
+        {label}
+      </button>
+      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+        {block.width === 12 ? "整行" : `${block.width}/12`}
+      </span>
+    </li>
+  );
+}
+
 function ToolBtn({
   label,
   active,
@@ -737,7 +924,7 @@ function ToolBtn({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={`grid h-8 min-w-8 place-items-center rounded-md px-1.5 transition-colors ${
+      className={`grid size-8 place-items-center rounded-md transition-colors ${
         active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"
       }`}
     >

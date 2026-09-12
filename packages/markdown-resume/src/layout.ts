@@ -28,6 +28,9 @@ export interface LayoutBlock {
   hidden: boolean;
   card: boolean;
   tint: string | null;
+  /** None=用章节原标题；""=隐藏标题；其余=替换标题文本 */
+  titleOverride: string | null;
+  size: "small" | "normal" | "large" | null;
 }
 
 export interface LayoutTheme {
@@ -70,6 +73,8 @@ export function defaultLayoutFor(markdown: string): LayoutConfig {
       hidden: false,
       card: false,
       tint: null,
+      titleOverride: null,
+      size: null,
     })),
     theme: defaultTheme(),
   };
@@ -186,6 +191,8 @@ ${canvas ? ".jsw-canvas" : "body"} {
 .jsw-b code { font-family: ui-monospace, Menlo, monospace; font-size: .9em; background: #f3f4f6; padding: 0 3px; border-radius: 2px; }
 .jsw-b img { max-width: 100%; }
 .jsw-b blockquote { margin: .3em 0; padding-left: 8px; border-left: 2px solid var(--jsw-primary); color: #6b7280; }
+.jsw-b.s-sm { font-size: .92em; }
+.jsw-b.s-lg { font-size: 1.08em; }
 .jsw-hidden { display: none !important; }
 `;
 }
@@ -247,10 +254,22 @@ export function renderLayoutDocument(
       const cls = [
         "jsw-b",
         `w-${w}`,
+        b.size === "small" ? "s-sm" : b.size === "large" ? "s-lg" : "",
         b.card ? "card" : "",
         b.card && b.tint && TINTS[b.tint] ? `tint-${b.tint}` : "",
       ].filter(Boolean).join(" ");
-      return `<section class="${cls}" data-block-id="${b.id}">${inner}</section>`;
+      let blockInner = inner;
+      if (b.titleOverride !== null && b.titleOverride !== undefined) {
+        if (b.titleOverride.trim() === "") {
+          blockInner = blockInner.replace(/<h2[\s\S]*?<\/h2>/, "");
+        } else {
+          blockInner = blockInner.replace(
+            /<h2([\s\S]*?)>([\s\S]*?)<\/h2>/,
+            `<h2$1>${b.titleOverride}</h2>`,
+          );
+        }
+      }
+      return `<section class="${cls}" data-block-id="${b.id}">${blockInner}</section>`;
     })
     .join("\n");
 

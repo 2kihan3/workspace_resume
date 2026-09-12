@@ -141,9 +141,9 @@ async dashboardMetrics() : Promise<Result<DashboardMetrics, SerializedError>> {
     else return { status: "error", error: e  as any };
 }
 },
-async importMarkdown(path: string, normalizedMarkdown: string, title: string) : Promise<Result<Resume, SerializedError>> {
+async importMarkdown(path: string, normalizedMarkdown: string, title: string, templateId: string) : Promise<Result<Resume, SerializedError>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("import_markdown", { path, normalizedMarkdown, title }) };
+    return { status: "ok", data: await TAURI_INVOKE("import_markdown", { path, normalizedMarkdown, title, templateId }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -184,6 +184,22 @@ async createResumeVersion(id: string, title: string) : Promise<Result<Resume, Se
 async duplicateResume(id: string) : Promise<Result<Resume, SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("duplicate_resume", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getLayout(id: string) : Promise<Result<LayoutConfig | null, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_layout", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async saveLayout(id: string, config: LayoutConfig) : Promise<Result<null, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_layout", { id, config }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -443,8 +459,48 @@ export type JobEvent = { id: string; job_id: string; event_type: string; from_st
 export type JobQuery = { status: JobStatus | null; search: string | null }
 export type JobStatus = "pending_analysis" | "pending_resume_optimization" | "pending_communication" | "pending_application" | "interviewing" | "passed" | "rejected"
 export type JobSummary = { id: string; company_name: string; role_title: string; status: JobStatus; location: string | null; salary_text: string | null; updated_at: string }
+export type LayoutBlock = { id: string; 
+/**
+ * "section"（绑定 md 章节）| "text"（自由文案，内容在 markdown 字段）
+ */
+type: string; sectionId: string | null; 
+/**
+ * text 容器的 Markdown 内容
+ */
+markdown: string | null; 
+/**
+ * 12 栅格宽度：12 | 8 | 6 | 4
+ */
+width: number; hidden: boolean; 
+/**
+ * 卡片化（圆角浅底）
+ */
+card: boolean; 
+/**
+ * 浅色着色（rose/blue/indigo/…，None 为透明）
+ */
+tint: string | null }
+export type LayoutConfig = { page: PageSetup; blocks: LayoutBlock[]; theme: LayoutTheme }
+export type LayoutTheme = { primary: string; 
+/**
+ * "sans" | "serif"
+ */
+font: string; 
+/**
+ * "compact" | "normal" | "airy"
+ */
+density: string }
 export type LoginInput = { mode: string; api_key?: string | null }
 export type LoginStartResult = { kind: string; auth_url: string | null; verification_url: string | null; user_code: string | null }
+export type PageSetup = { 
+/**
+ * 四边距（mm），容器区在剩余空间水平居中
+ */
+marginTop: number; marginRight: number; marginBottom: number; marginLeft: number; headerEnabled: boolean; headerHeightMm: number; 
+/**
+ * 页眉文案（Markdown，单行段落即可）
+ */
+headerMarkdown: string | null; footerEnabled: boolean; footerHeightMm: number; footerPageNumbers: boolean; footerMarkdown: string | null }
 export type PdfExportResult = { output_path: string; page_count: number; sha256: string }
 export type Resume = { id: string; title: string; kind: ResumeKind; markdown_path: string; parent_resume_id: string | null; job_id: string | null; template_id: string; content_sha256: string; created_at: string; updated_at: string }
 export type ResumeContent = { resume: Resume; markdown: string }

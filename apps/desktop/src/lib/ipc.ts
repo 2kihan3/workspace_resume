@@ -110,23 +110,8 @@ export interface LoginStartResult {
   user_code: string | null;
 }
 
-export interface LayoutBlock {
-  id: string; type: "section" | "text"; sectionId: string | null; markdown: string | null;
-  width: 12 | 8 | 6 | 4; hidden: boolean; card: boolean; tint: string | null;
-}
-
-export interface LayoutConfig {
-  page: {
-    marginTop: number; marginRight: number; marginBottom: number; marginLeft: number;
-    headerEnabled: boolean; headerHeightMm: number; headerMarkdown: string | null;
-    footerEnabled: boolean; footerHeightMm: number; footerPageNumbers: boolean; footerMarkdown: string | null;
-  };
-  blocks: Array<{
-    id: string; type: "section" | "text"; sectionId: string | null; markdown: string | null;
-    width: 12 | 8 | 6 | 4; hidden: boolean; card: boolean; tint: string | null;
-  }>;
-  theme: { primary: string; font: "sans" | "serif"; density: "compact" | "normal" | "airy" };
-}
+export type { LayoutConfig, LayoutBlock } from "@jsw/markdown-resume";
+import type { LayoutConfig } from "@jsw/markdown-resume";
 
 export interface RunOutput {
   name: string;

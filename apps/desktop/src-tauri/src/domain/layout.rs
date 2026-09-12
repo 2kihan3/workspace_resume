@@ -61,6 +61,10 @@ pub struct LayoutBlock {
     pub card: bool,
     /// 浅色着色（rose/blue/indigo/…，None 为透明）
     pub tint: Option<String>,
+    /// 自定义标题：None 用章节原文；Some("") 隐藏标题；其他为替换文本
+    pub title_override: Option<String>,
+    /// 字号档位："small" | "normal" | "large"（None 为 normal）
+    pub size: Option<String>,
 }
 
 impl Default for LayoutBlock {
@@ -74,6 +78,8 @@ impl Default for LayoutBlock {
             hidden: false,
             card: false,
             tint: None,
+            title_override: None,
+            size: None,
         }
     }
 }
