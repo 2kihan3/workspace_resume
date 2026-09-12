@@ -6,7 +6,7 @@ import { EditorSelection, EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
-import { Bold, Heading2, Italic, Link2, List } from "lucide-react";
+import { Bold, ChevronLeft, Heading2, Italic, Link2, List } from "lucide-react";
 import { api } from "../lib/constants";
 import { parseResumeDocument, renderSectionHtml, splitSections } from "@jsw/markdown-resume";
 import { renderTemplate, pageCss, TemplateManifestSchema } from "@jsw/template-engine";
@@ -186,6 +186,13 @@ function ResumeEditor() {
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex items-center gap-3">
+        <Link
+          to="/resumes"
+          className="flex h-11 shrink-0 items-center gap-1 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="返回简历库"
+        >
+          <ChevronLeft aria-hidden /> 简历库
+        </Link>
         <h1 className="flex-1 truncate text-xl font-semibold">{content.data?.resume.title}</h1>
         <span className={`text-sm ${dirty ? "text-amber-600" : "text-muted-foreground"}`}>
           {dirty ? "未保存" : "已保存"}

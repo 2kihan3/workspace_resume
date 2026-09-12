@@ -92,6 +92,8 @@ pub struct LayoutTheme {
     pub font: String,
     /// "compact" | "normal" | "airy"
     pub density: String,
+    /// 标题样式："bar"（现代简洁短条）| "dot"（时间线节点）| "plain"（无装饰）
+    pub heading: Option<String>,
 }
 
 impl Default for LayoutTheme {
@@ -100,6 +102,7 @@ impl Default for LayoutTheme {
             primary: "#0f766e".into(),
             font: "sans".into(),
             density: "normal".into(),
+            heading: Some("bar".into()),
         }
     }
 }

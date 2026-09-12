@@ -27,6 +27,7 @@ export const Route = createFileRoute("/resumes/$resumeId/layout")({
 });
 
 type EditMode = "canvas" | "source";
+type PresetKey = "timeline" | "modern" | "single" | "sidebar" | "cards";
 
 const PRESET_COLORS = [
   "#0f766e", "#4f46e5", "#e11d48", "#ea580c",
@@ -67,7 +68,20 @@ function LayoutEditor() {
       if (!content.data || markdown !== null) return;
       setMarkdown(content.data.markdown);
       const saved = await api.getLayout(resumeId).catch(() => null);
-      setLayout(saved ?? defaultLayoutFor(content.data.markdown));
+      if (saved) {
+        setLayout(saved);
+      } else {
+        // 未排版过：按简历所选模板套对应版式（timeline/modern→同名版式，其余通栏）
+        const fresh = defaultLayoutFor(content.data.markdown);
+        if (content.data.resume.template_id === "builtin.timeline") {
+          fresh.theme.heading = "dot";
+          fresh.theme.primary = "#0d9488";
+        } else if (content.data.resume.template_id === "builtin.modern") {
+          fresh.theme.heading = "bar";
+          fresh.theme.primary = "#7c3aed";
+        }
+        setLayout(fresh);
+      }
     })();
   }, [content.data, markdown, resumeId]);
 
@@ -312,7 +326,7 @@ function LayoutEditor() {
     setMode("source");
   };
 
-  const applyPreset = (preset: "single" | "sidebar" | "cards") => {
+  const applyPreset = (preset: PresetKey) => {
     update((draft) => {
       const ids = draft.blocks.map((b) => b.sectionId).filter(Boolean) as string[];
       const order = ["basic", "experience", "projects", "education", "skills"]
@@ -335,6 +349,14 @@ function LayoutEditor() {
         return base;
       };
       draft.blocks = all.map(mk);
+      // 版式主题：时间线=节点标题+青绿；现代简洁=紫色短条；其余保持现主题
+      if (preset === "timeline") {
+        draft.theme.heading = "dot";
+        draft.theme.primary = "#0d9488";
+      } else if (preset === "modern") {
+        draft.theme.heading = "bar";
+        draft.theme.primary = "#7c3aed";
+      }
     });
     setSelectedId(null);
     toast.success("已应用预设，可继续微调单个容器");
@@ -410,7 +432,9 @@ function LayoutEditor() {
             <h2 className="mb-1 text-sm font-semibold">整体布局</h2>
             <p className="mb-3 text-xs text-muted-foreground">一键重排全部容器，之后再逐个微调。</p>
             <div className="grid grid-cols-3 gap-2">
-              <PresetBtn label="单栏" desc="通栏排布" onClick={() => applyPreset("single")} />
+              <PresetBtn label="时间线" desc="节点串联" onClick={() => applyPreset("timeline")} />
+              <PresetBtn label="现代简洁" desc="紫色短条" onClick={() => applyPreset("modern")} />
+              <PresetBtn label="通栏" desc="基础单栏" onClick={() => applyPreset("single")} />
               <PresetBtn label="侧栏" desc="左窄右宽" onClick={() => applyPreset("sidebar")} />
               <PresetBtn label="卡片" desc="彩色圆角" onClick={() => applyPreset("cards")} />
             </div>
@@ -646,6 +670,19 @@ function LayoutEditor() {
               ))}
             </div>
             <div className="mt-2 flex gap-2">
+              {([["bar", "短条"], ["dot", "节点"], ["plain", "素标题"]] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => update((d) => { d.theme.heading = v; })}
+                  className={`h-9 flex-1 rounded-md text-sm transition-colors ${
+                    (layout.theme.heading ?? "bar") === v ? "bg-primary text-primary-foreground" : "bg-muted hover:opacity-80"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 flex gap-2">
               {([["compact", "紧凑"], ["normal", "标准"], ["airy", "舒展"]] as const).map(([v, label]) => (
                 <button
                   key={v}
@@ -730,7 +767,7 @@ function LayoutEditor() {
           <div
             style={{ transform: `scale(${zoom})`, transformOrigin: "top center", width: 794, margin: "0 auto" }}
           >
-            <div ref={canvasRef} className="jsw-canvas relative" style={{ width: 794 }}>
+            <div ref={canvasRef} className={`jsw-canvas relative heading-${layout.theme.heading ?? "bar"}`} style={{ width: 794 }}>
               {canvas?.ok && (
                 <>
                   <style>{canvas.css}</style>

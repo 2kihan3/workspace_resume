@@ -37,6 +37,8 @@ export interface LayoutTheme {
   primary: string;
   font: "sans" | "serif";
   density: "compact" | "normal" | "airy";
+  /** 标题样式：bar=现代简洁短条；dot=时间线节点；plain=无装饰 */
+  heading: "bar" | "dot" | "plain" | null;
 }
 
 export interface LayoutConfig {
@@ -56,7 +58,7 @@ export function defaultPageSetup(): PageSetup {
 }
 
 export function defaultTheme(): LayoutTheme {
-  return { primary: "#0f766e", font: "sans", density: "normal" };
+  return { primary: "#0f766e", font: "sans", density: "normal", heading: "bar" };
 }
 
 /** 从简历章节生成默认布局（单栏全宽、无卡片）。 */
@@ -101,11 +103,12 @@ function layoutCss(layout: LayoutConfig, forPrint: boolean, canvas = false): str
   const topPx = p.marginTop * MM_PX + (p.headerEnabled ? p.headerHeightMm * MM_PX + 8 : 0);
   const bottomPx = p.marginBottom * MM_PX + (p.footerEnabled ? p.footerHeightMm * MM_PX + 8 : 0);
   return `
-${canvas ? ".jsw-canvas" : ":root"} {
+${canvas ? ".jsw-canvas" : "body"} {
   --jsw-primary: ${layout.theme.primary};
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+${canvas ? "" : `body.heading-${layout.theme.heading ?? "bar"} { --jsw-heading: 1; }`}
 body { margin: 0; padding: 0; }
 ${canvas ? ".jsw-canvas" : "body"} {
   font-family: ${serif
@@ -169,15 +172,28 @@ ${canvas ? ".jsw-canvas" : "body"} {
 .jsw-b.card.tint-teal   { background: ${TINTS.teal}; }
 .jsw-b.card.tint-amber  { background: ${TINTS.amber}; }
 .jsw-b h1 { font-size: 1.55em; margin: 0 0 .2em; color: #111827; }
+/* 标题样式变体：bar（默认）/ dot（时间线）/ plain */
 .jsw-b h2 {
   display: flex; align-items: center; gap: 8px;
   font-size: 1.05em; color: var(--jsw-primary);
   margin: 0 0 .6em; letter-spacing: .5px;
 }
-.jsw-b h2::before {
+.heading-bar .jsw-b h2::before {
   content: ""; width: 14px; height: 4px; border-radius: 2px;
   background: var(--jsw-primary); flex: none;
 }
+.heading-dot .jsw-b {
+  border-left: 2px solid color-mix(in srgb, var(--jsw-primary) 30%, #fff);
+  padding-left: 16px;
+}
+.heading-dot .jsw-b h2::before {
+  content: ""; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--jsw-primary); flex: none;
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--jsw-primary) 25%, #fff);
+  margin-left: -21.5px;
+}
+.heading-dot .jsw-b.card { padding-left: 16px; }
+.heading-plain .jsw-b h2 { font-weight: 700; }
 .jsw-b h3 { font-size: 1em; margin: .7em 0 .1em; font-weight: 600; }
 .jsw-b p { margin: .25em 0; }
 .jsw-b ul { margin: .25em 0; padding-left: 1.2em; }
@@ -290,7 +306,7 @@ export function renderLayoutDocument(
 <head><meta charset="utf-8"><title>简历</title>
 <style>${layoutCss(layout, forPrint)}</style>
 </head>
-<body>
+<body class="heading-${layout.theme.heading ?? "bar"}">
 <div class="jsw-page">
 ${headerHtml}
 <div class="jsw-grid">
