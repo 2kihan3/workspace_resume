@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { open as openFileDialog, save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   DndContext, PointerSensor, useSensor, useSensors,
 } from "@dnd-kit/core";
@@ -136,16 +136,24 @@ function LayoutEditor() {
       if (!markdown || !layout) throw new Error("尚未加载完成");
       const printed = renderLayoutDocument(markdown, layout, true);
       if (!printed.ok) throw new Error(printed.errors.join("；"));
-      const outPath = content.data!.resume.markdown_path.replace(/resume\.md$/, "resume.pdf");
+      const suggested = `${(content.data!.resume.title || "简历").replace(/[\\/:*?"<>|]/g, "_")}.pdf`;
+      const savePath = await saveFileDialog({
+        title: "保存 PDF",
+        defaultPath: suggested,
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      if (!savePath) return null; // 取消
       return api.exportPdfRendered({
         resumeId,
         templateId: content.data!.resume.template_id,
         renderedHtml: printed.html,
         pageCss: layoutPageCss(layout),
-        outputPath: outPath,
+        outputPath: savePath,
       });
     },
-    onSuccess: (r) => toast.success(`PDF 已导出（${r.page_count} 页）`),
+    onSuccess: (r) => {
+      if (r) toast.success(`PDF 已保存：${r.output_path}`);
+    },
     onError: (e) => toast.error(`导出失败：${(e as Error).message}`),
   });
 

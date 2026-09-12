@@ -7,6 +7,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
 import { indentWithTab } from "@codemirror/commands";
 import { Bold, ChevronLeft, Heading2, Italic, Link2, List } from "lucide-react";
+import { save as saveFileDialog } from "@tauri-apps/plugin-dialog";
 import { api } from "../lib/constants";
 import { parseResumeDocument, renderSectionHtml, splitSections } from "@jsw/markdown-resume";
 import { renderTemplate, pageCss, TemplateManifestSchema } from "@jsw/template-engine";
@@ -124,17 +125,25 @@ function ResumeEditor() {
         },
       });
       if (!result.ok || !result.html) throw new Error(result.errors.join("；"));
-      // 输出到 app data 外不可写，导出到简历目录（相对 app_data_dir）
-      const outPath = `${content.data.resume.markdown_path.replace(/resume\.md$/, "resume.pdf")}`;
+      // 用户选择保存位置（默认文件名 = 简历标题）
+      const suggested = `${(content.data.resume.title || "简历").replace(/[\\/:*?"<>|]/g, "_")}.pdf`;
+      const savePath = await saveFileDialog({
+        title: "保存 PDF",
+        defaultPath: suggested,
+        filters: [{ name: "PDF", extensions: ["pdf"] }],
+      });
+      if (!savePath) return null; // 取消
       return api.exportPdfRendered({
         resumeId,
         templateId: templateId ?? content.data.resume.template_id,
         renderedHtml: result.html,
         pageCss: pageCss(manifest),
-        outputPath: outPath,
+        outputPath: savePath,
       });
     },
-    onSuccess: (r) => toast.success(`PDF 已导出（${r.page_count} 页）`),
+    onSuccess: (r) => {
+      if (r) toast.success(`PDF 已保存：${r.output_path}`);
+    },
     onError: (e) => toast.error(`导出失败：${(e as Error).message}`),
   });
 

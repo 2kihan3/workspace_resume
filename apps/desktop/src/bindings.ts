@@ -497,7 +497,11 @@ font: string;
 /**
  * "compact" | "normal" | "airy"
  */
-density: string }
+density: string; 
+/**
+ * 标题样式："bar"（现代简洁短条）| "dot"（时间线节点）| "plain"（无装饰）
+ */
+heading: string | null }
 export type LoginInput = { mode: string; api_key?: string | null }
 export type LoginStartResult = { kind: string; auth_url: string | null; verification_url: string | null; user_code: string | null }
 export type PageSetup = { 

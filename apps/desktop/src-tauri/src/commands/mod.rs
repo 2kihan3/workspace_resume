@@ -243,12 +243,19 @@ pub async fn export_pdf_rendered(
 ) -> Result<PdfExportResult, SerializedError> {
     let _ = resume_id;
     let template_dir = state.layout.template_dir(&template_id);
+    // 相对路径解析到 app_data_dir（此前会落到进程工作目录）
+    let out_abs = std::path::Path::new(&output_path);
+    let out_abs = if out_abs.is_absolute() {
+        out_abs.to_path_buf()
+    } else {
+        state.layout.app_data_dir.join(out_abs)
+    };
     let result = state.pdf_exporter.export(
         &app,
         crate::infrastructure::pdf::PdfExportRequestMac {
             html: rendered_html,
             base_dir: template_dir,
-            output_path: output_path.clone().into(),
+            output_path: out_abs,
             page_css,
         },
     )?;
