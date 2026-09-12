@@ -238,25 +238,21 @@ ${canvas ? ".jsw-canvas" : "body"} {
 .jsw-b.jsw-heading.s-lg > * { font-size: 1.9em; }
 
 /* 时间线连续轴线：单栏版式下贯穿整页 */
+/* 时间轴 hang 模式：每个挂轴块自画线段并向上下各延伸一个行距，
+   相邻块的线段搭接成连续轴线；标题类块不画线，线在它那里自然断开
+   （首块线段只向下延伸，末块只向上延伸，避免越界）。 */
 .jsw-grid.axis { position: relative; }
-.jsw-grid.axis::before {
-  content: ""; position: absolute; left: 4px; top: 6px; bottom: 6px;
-  width: 2px; border-radius: 1px;
+.jsw-grid.axis .jsw-b.hang { position: relative; border-left: none; padding-left: 22px; }
+.jsw-grid.axis .jsw-b.hang::after {
+  content: ""; position: absolute; left: 4px; width: 2px; border-radius: 1px;
+  top: calc(-1 * ${d.gap}); bottom: calc(-1 * ${d.gap});
   background: color-mix(in srgb, var(--jsw-primary) 30%, #fff);
 }
-.jsw-grid.axis .jsw-b { border-left: none; padding-left: 22px; }
+.jsw-grid.axis .jsw-b.hang-first::after { top: 0; }
+.jsw-grid.axis .jsw-b.hang-last::after { bottom: 0; }
 .jsw-grid.axis .jsw-b.hero,
 .jsw-grid.axis .jsw-b.free,
 .jsw-grid.axis .jsw-b.jsw-heading { padding-left: 0; }
-/* 图层遮挡：标题类块背景提到轴线上层，顶部标题区不露线；
-   宽度即遮挡范围（w-8 时余下 4/12 连线照常显示） */
-.jsw-grid.axis .jsw-b.hero:not(.card),
-.jsw-grid.axis .jsw-b.free:not(.card),
-.jsw-grid.axis .jsw-b.jsw-heading:not(.card) {
-  position: relative;
-  z-index: 1;
-  background: #fff;
-}
 .jsw-b h3 { font-size: 1em; margin: .7em 0 .1em; font-weight: 600; }
 .jsw-b p { margin: .25em 0; }
 .jsw-b ul { margin: .25em 0; padding-left: 1.2em; }
@@ -272,6 +268,7 @@ ${canvas ? ".jsw-canvas" : "body"} {
 .jsw-b blockquote { margin: .3em 0; padding-left: 8px; border-left: 2px solid var(--jsw-primary); color: #6b7280; }
 .jsw-b.s-sm { font-size: .92em; }
 .jsw-b.s-lg { font-size: 1.08em; }
+/* __AXIS_GAP_INJECT__ */
 .jsw-hidden { display: none !important; }
 `;
 }
@@ -318,11 +315,17 @@ export function renderLayoutDocument(
 
   const placed = new Set<string>();
   const visible = layout.blocks.filter((b) => !b.hidden);
-  // 时间线版式且全部可见块都是整行时，启用贯穿轴线（连线连续）
+  // 时间线版式且全部可见块都是整行时，启用 hang 连续轴线
   const axis =
     (layout.theme.heading ?? "bar") === "dot" &&
     visible.length > 0 &&
     visible.every((b) => b.width === 12);
+  // 挂轴块：普通 section（非页头、非通用组件）；首/末挂轴块收口线段
+  const isHang = (b: LayoutBlock) =>
+    b.type === "section" && !b.hero && b.binding !== "free";
+  const hangIds = visible.filter(isHang).map((b) => b.id);
+  const firstHang = hangIds[0];
+  const lastHang = hangIds[hangIds.length - 1];
   const blockHtml = visible
     .map((b) => {
       let inner = "";
@@ -347,6 +350,9 @@ export function renderLayoutDocument(
         b.type === "heading" ? "jsw-heading" : "",
         b.hero ? "hero" : "",
         b.align === "center" ? "ta-center" : b.align === "right" ? "ta-right" : "",
+        axis && isHang(b) ? "hang" : "",
+        axis && b.id === firstHang ? "hang-first" : "",
+        axis && b.id === lastHang ? "hang-last" : "",
       ].filter(Boolean).join(" ");
       let blockInner = inner;
       if (b.type !== "heading" && b.titleOverride !== null && b.titleOverride !== undefined) {
