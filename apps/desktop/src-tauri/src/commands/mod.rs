@@ -435,6 +435,20 @@ pub async fn start_app_server(state: State<'_, AppState>, app: tauri::AppHandle)
         .await
         .map_err(|e| SerializedError::new("internal", e))?;
 
+    // 注册工作区 Skill 根目录：thread 的 Skill 发现默认只扫个人与插件目录，
+    // 不含应用工作区（实测模型看不到内置 Skill 而拒绝执行）。
+    // extraRoots 为会话级设置，每次启动 App Server 后注册一次。
+    let skills_dir = state.layout.skills_dir().to_string_lossy().to_string();
+    if let Err(e) = handle
+        .request(
+            "skills/extraRoots/set",
+            serde_json::json!({ "extraRoots": [skills_dir] }),
+        )
+        .await
+    {
+        tracing::warn!("注册工作区 Skill 根目录失败: {e}");
+    }
+
     state.ai_service.set_supervisor(handle.clone()).await;
     let app2 = app.clone();
     tokio::spawn(async move {

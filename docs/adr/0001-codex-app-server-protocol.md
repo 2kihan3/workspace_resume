@@ -39,6 +39,15 @@
   （原来经 Tauri 事件回环：emit → app.listen → bridge，多一跳且依赖监听注册时机）；
   Tauri 事件保留用于 UI 流式展示。
 
+## 2026-09-14 补记：工作区 Skill 根目录需显式注册
+
+- thread 的 Skill 发现默认只扫 `~/.codex/skills`、`~/.agents/skills` 与插件目录，
+  **不包含 cwd 向上走查的 `.agents/skills`**——即使 thread cwd 在工作区内，
+  内置 Skill 也不会出现在会话清单（模型会因找不到 Skill 拒绝执行、零产出）。
+- 修法：`initialize` 握手后调用 `skills/extraRoots/set`，参数
+  `{ "extraRoots": ["<workspace>/.agents/skills"] }`；会话级设置，每次启动
+  App Server 注册一次（实测注册后新 thread 的 Skill roots 表出现 r8=工作区目录）。
+
 ## 影响
 
 - supervisor 为每个请求维护独立超时（默认 180s，`account/read` 15s）。
