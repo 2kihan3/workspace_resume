@@ -106,6 +106,24 @@ pub fn run() {
 
             let ai_service = AIService::new(db_shared.clone(), layout.clone());
 
+            // 孤儿任务清理：上次退出时仍在 running/queued 的任务已随进程死亡，
+            // 标记失败（spec §14 应用崩溃恢复），避免 UI 永远显示运行中
+            tauri::async_runtime::block_on(async {
+                let n = sqlx::query(
+                    "UPDATE ai_runs SET status = 'failed', error_code = 'orphaned', \
+                     error_message = '应用退出时任务被中断，请重新运行', finished_at = ? \
+                     WHERE status IN ('running', 'queued', 'waiting_approval')",
+                )
+                .bind(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+                .execute(&db)
+                .await
+                .map(|r| r.rows_affected())
+                .unwrap_or(0);
+                if n > 0 {
+                    tracing::info!("已标记 {n} 个孤儿 AI 任务为失败");
+                }
+            });
+
             // 崩溃恢复扫描（spec §10.6）
             let recovery = tauri::async_runtime::block_on(async {
                 let runs_dir = layout.ai_runs_dir();
