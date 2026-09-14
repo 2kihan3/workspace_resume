@@ -2,7 +2,7 @@
   "name": "job-search-workbench",
   "private": true,
   "version": "1.0.0",
-  "description": "macOS \u4f18\u5148\u7684\u672c\u5730\u5355\u7528\u6237\u6c42\u804c\u5de5\u4f5c\u53f0\u684c\u9762\u5e94\u7528",
+  "description": "macOS 优先的本地单用户求职工作台桌面应用",
   "packageManager": "pnpm@12.3.4",
   "engines": {
     "node": ">=22"
@@ -14,10 +14,5 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "tauri": "pnpm --filter @jsw/desktop tauri"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }

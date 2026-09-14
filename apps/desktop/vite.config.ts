@@ -7,6 +7,11 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig({
   plugins: [TanStackRouterVite(), react(), tailwindcss()],
+  // 强制 react 单实例：workspace 包的 peer 依赖可能解析出另一份 React，
+  // 双实例会导致 hooks 报 null（N.H.useRef 崩溃）
+  resolve: {
+    dedupe: ["react", "react-dom"],
+  },
   clearScreen: false,
   server: {
     port: 1420,

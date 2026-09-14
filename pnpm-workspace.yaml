@@ -1,12 +1,13 @@
 packages:
   - "apps/desktop"
   - "packages/*"
+
+overrides:
+  react: 19.3.0
+  react-dom: 19.3.0
+
+onlyBuiltDependencies:
+  - esbuild
+
 allowBuilds:
   esbuild: set this to true or false
-minimumReleaseAgeExclude:
-  - '@tanstack/history@1.162.3'
-  - '@tanstack/react-router@1.170.34'
-  - '@tanstack/router-core@1.171.29'
-  - '@tanstack/router-generator@1.167.35'
-  - '@tanstack/router-plugin@1.168.37'
-  - '@tanstack/router-utils@1.162.3'
