@@ -57,6 +57,8 @@ pub fn run() {
         commands::logout,
         commands::list_skills,
         commands::set_skill_enabled,
+        commands::import_skill,
+        commands::delete_skill,
         commands::enqueue_run,
         commands::cancel_run,
         commands::list_runs,

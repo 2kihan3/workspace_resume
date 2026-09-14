@@ -606,6 +606,43 @@ pub async fn list_skills(state: State<'_, AppState>, force_reload: bool) -> Resu
     Ok(out)
 }
 
+/// 从本地目录导入 Skill（复制进工作区 .agents/skills）。
+#[tauri::command]
+#[specta::specta]
+pub async fn import_skill(
+    state: State<'_, AppState>,
+    path: String,
+    replace: bool,
+) -> Result<String, SerializedError> {
+    let src = std::path::PathBuf::from(&path);
+    // 轻量异步包装（目录复制在后台线程，避免卡 UI）
+    let skills_dir = state.layout.skills_dir();
+    let name = tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::skills::import_skill_from_dir(&src, &skills_dir, replace)
+    })
+    .await
+    .map_err(|e| SerializedError::new("internal", e.to_string()))?
+    .map_err(SerializedError::from)?;
+    Ok(name)
+}
+
+/// 删除已导入的 Skill（内置拒绝）。
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_skill(
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<(), SerializedError> {
+    let skills_dir = state.layout.skills_dir();
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ai::skills::delete_skill(&skills_dir, &name)
+    })
+    .await
+    .map_err(|e| SerializedError::new("internal", e.to_string()))?
+    .map_err(SerializedError::from)?;
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn set_skill_enabled(state: State<'_, AppState>, path: String, enabled: bool) -> Result<(), SerializedError> {

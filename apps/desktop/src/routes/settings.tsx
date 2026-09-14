@@ -6,7 +6,10 @@ import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { SkillInfo } from "../lib/ipc";
 import { Button } from "@jsw/ui";
+import { Trash2 } from "lucide-react";
 import { api } from "../lib/constants";
+
+const BUILTIN_SKILL_NAMES = ["job-jd-analyzer", "company-researcher", "resume-tailor"];
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -167,9 +170,45 @@ function SettingsPage() {
       </section>
 
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-3 font-medium">Skills</h2>
-        {/* 应用工作区内置 Skill：置顶展开（AI 任务实际使用这三个） */}
-        <p className="mb-2 text-xs text-muted-foreground">应用工作区（内置，AI 任务使用）</p>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-medium">Skills</h2>
+          <Button
+            size="sm" variant="outline"
+            onClick={async () => {
+              const dir = await open({
+                multiple: false,
+                directory: true,
+                title: "选择 Skill 目录（需包含 SKILL.md）",
+              });
+              if (!dir || typeof dir !== "string") return;
+              try {
+                const name = await api.importSkill(dir, false);
+                toast.success(`已导入 Skill：${name}`);
+                skills.refetch();
+              } catch (e) {
+                const msg = (e as Error).message ?? String(e);
+                if (msg.includes("已存在")) {
+                  const replaceIt = window.confirm(`${msg}\n要替换同名 Skill 吗？`);
+                  if (replaceIt) {
+                    try {
+                      await api.importSkill(dir, true);
+                      toast.success("已替换");
+                      skills.refetch();
+                    } catch (e2) {
+                      toast.error((e2 as Error).message);
+                    }
+                  }
+                } else {
+                  toast.error(msg);
+                }
+              }
+            }}
+          >
+            导入 Skill…
+          </Button>
+        </div>
+        {/* 工作区 Skill（内置 + 已导入）：AI 任务可用 */}
+        <p className="mb-2 text-xs text-muted-foreground">工作区 Skill（内置与已导入，AI 任务可用）</p>
         <div className="flex flex-col gap-2">
           {(skills.data ?? []).filter(isBuiltin).map((sk) => (
               <div key={sk.name} className="flex items-center justify-between rounded-md bg-card p-3 text-sm outline outline-1 outline-border">
@@ -178,13 +217,35 @@ function SettingsPage() {
                   <div className="truncate text-muted-foreground" title={sk.description}>{sk.description}</div>
                   {sk.error && <div className="text-destructive">{sk.error}</div>}
                 </div>
-                {sk.path && (
-                  <label className="flex shrink-0 cursor-pointer items-center gap-2">
-                    <input type="checkbox" checked={sk.enabled}
-                      onChange={(e) => toggleSkill.mutate({ path: sk.path!, enabled: e.target.checked })} />
-                    {sk.enabled ? "已启用" : "已停用"}
-                  </label>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {sk.path && (
+                    <label className="flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={sk.enabled}
+                        onChange={(e) => toggleSkill.mutate({ path: sk.path!, enabled: e.target.checked })} />
+                      {sk.enabled ? "已启用" : "已停用"}
+                    </label>
+                  )}
+                  {!BUILTIN_SKILL_NAMES.includes(sk.name) && (
+                    <button
+                      aria-label={`删除 Skill ${sk.name}`}
+                      title="删除"
+                      onClick={async () => {
+                        const sure = window.confirm(`删除已导入的 Skill「${sk.name}」？`);
+                        if (!sure) return;
+                        try {
+                          await api.deleteSkill(sk.name);
+                          toast.success("已删除");
+                          skills.refetch();
+                        } catch (e) {
+                          toast.error((e as Error).message);
+                        }
+                      }}
+                      className="grid size-8 place-items-center rounded-md text-destructive hover:bg-destructive/10"
+                    >
+                      <Trash2 className="size-4" aria-hidden />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           {skills.data?.length === 0 && (

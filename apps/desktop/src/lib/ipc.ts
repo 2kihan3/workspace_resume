@@ -200,6 +200,9 @@ export const api = {
   listSkills: (forceReload: boolean) => invoke<SkillInfo[]>("list_skills", { forceReload }),
   setSkillEnabled: (path: string, enabled: boolean) =>
     invoke<void>("set_skill_enabled", { path, enabled }),
+  importSkill: (path: string, replace: boolean) =>
+    invoke<string>("import_skill", { path, replace }),
+  deleteSkill: (name: string) => invoke<void>("delete_skill", { name }),
   enqueueRun: (input: AIRunInput) => invoke<AIRun>("enqueue_run", { input }),
   cancelRun: (id: string) => invoke<void>("cancel_run", { id }),
   listRuns: (jobId?: string | null) => invoke<AIRun[]>("list_runs", { jobId }),

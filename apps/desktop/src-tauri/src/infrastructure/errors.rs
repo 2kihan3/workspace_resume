@@ -101,3 +101,9 @@ impl From<sqlx::Error> for SerializedError {
         SerializedError { code: "database".into(), message: e.to_string() }
     }
 }
+
+impl From<String> for SerializedError {
+    fn from(message: String) -> Self {
+        SerializedError { code: "validation".into(), message }
+    }
+}
