@@ -295,6 +295,28 @@ async readAiStatus() : Promise<Result<AIServiceStatus, SerializedError>> {
 }
 },
 /**
+ * 读取 codex 路径覆盖（None = 自动发现）。
+ */
+async getCodexPathOverride() : Promise<Result<string | null, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_codex_path_override") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 设置 codex 路径覆盖：空串清除（回到自动发现）；非空校验文件存在。
+ */
+async setCodexPathOverride(path: string) : Promise<Result<null, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_codex_path_override", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * 启动 App Server 并完成 initialize 握手（spec §10.3）。
  */
 async startAppServer() : Promise<Result<string, SerializedError>> {
@@ -332,6 +354,28 @@ async listSkills(forceReload: boolean) : Promise<Result<SkillInfo[], SerializedE
 async setSkillEnabled(path: string, enabled: boolean) : Promise<Result<null, SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("set_skill_enabled", { path, enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 从本地目录导入 Skill（复制进工作区 .agents/skills）。
+ */
+async importSkill(path: string, replace: boolean) : Promise<Result<string, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_skill", { path, replace }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 删除已导入的 Skill（内置拒绝）。
+ */
+async deleteSkill(name: string) : Promise<Result<null, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_skill", { name }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
