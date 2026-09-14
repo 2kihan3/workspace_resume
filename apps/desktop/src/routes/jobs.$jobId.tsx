@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api, JOB_STATUS_LABELS, JOB_STATUS_ORDER } from "../lib/constants";
 import { Badge, Button, Select } from "@jsw/ui";
+import { JobDeleteDialog, JobEditDialog, jobEditable } from "../components/JobDialogs";
+import { Pencil, Trash2 } from "lucide-react";
 import type { JobStatus } from "../lib/types";
 
 export const Route = createFileRoute("/jobs/$jobId")({ component: JobDetail });
@@ -12,7 +14,10 @@ const TABS = ["概览", "JD 与分析", "岗位简历", "沟通", "面试", "AI 
 
 function JobDetail() {
   const { jobId } = Route.useParams();
+  const navigate = useNavigate();
   const [tab, setTab] = useState<(typeof TABS)[number]>("概览");
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const job = useQuery({ queryKey: ["job", jobId], queryFn: () => api.getJob(jobId) });
 
   if (!job.data) {
@@ -30,8 +35,30 @@ function JobDetail() {
             {j.role_title ? ` · ${j.role_title}` : ""}
           </h1>
         </div>
-        <Badge variant={j.status}>{JOB_STATUS_LABELS[j.status]}</Badge>
+        <div className="flex items-center gap-1">
+          {jobEditable(j.status) && (
+            <button
+              aria-label="编辑岗位信息"
+              title="编辑岗位信息（优化简历前可用）"
+              onClick={() => setEditing(true)}
+              className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Pencil className="size-4" aria-hidden />
+            </button>
+          )}
+          <button
+            aria-label="删除岗位"
+            title="删除岗位"
+            onClick={() => setDeleting(true)}
+            className="grid size-9 place-items-center rounded-md text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="size-4" aria-hidden />
+          </button>
+          <Badge variant={j.status}>{JOB_STATUS_LABELS[j.status]}</Badge>
+        </div>
       </div>
+      {editing && <JobEditDialog job={j} open onOpenChange={() => setEditing(false)} />}
+      {deleting && <JobDeleteDialog job={j} open onOpenChange={() => setDeleting(false)} onDeleted={() => navigate({ to: "/jobs" })} />}
 
       <div role="tablist" aria-label="岗位详情" className="flex gap-1 border-b border-border">
         {TABS.map((t) => (

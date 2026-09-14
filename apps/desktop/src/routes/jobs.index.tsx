@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import { JobDeleteDialog, JobEditDialog, jobEditable } from "../components/JobDialogs";
 import { api, JOB_STATUS_LABELS } from "../lib/constants";
+import type { JobSummary } from "../lib/types";
 import { Badge, Button, Card, Empty, Input, Label, Textarea } from "@jsw/ui";
 
 export const Route = createFileRoute("/jobs/")({ component: JobsPage });
@@ -15,6 +17,8 @@ function JobsPage() {
   const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<JobSummary | null>(null);
+  const [deleting, setDeleting] = useState<JobSummary | null>(null);
 
   const create = useMutation({
     mutationFn: () =>
@@ -65,24 +69,45 @@ function JobsPage() {
         </Card>
       )}
 
+      {editing && <JobEditDialog job={editing} open onOpenChange={() => setEditing(null)} />}
+      {deleting && <JobDeleteDialog job={deleting} open onOpenChange={() => setDeleting(null)} />}
+
       <div className="flex flex-col gap-2">
         {(jobs.data ?? []).map((job) => (
-          <Link
+          <div
             key={job.id}
-            to="/jobs/$jobId"
-            params={{ jobId: job.id }}
-            className="flex items-center justify-between rounded-xl border border-border bg-card p-4 transition-shadow duration-150 hover:shadow-md"
+            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 transition-shadow duration-150 hover:shadow-md"
           >
-            <div>
+            <Link to="/jobs/$jobId" params={{ jobId: job.id }} className="min-w-0 flex-1">
               <div className="font-medium">{job.company_name}</div>
               <div className="text-sm text-muted-foreground">
                 {job.role_title || "未填写岗位"}
                 {job.location ? ` · ${job.location}` : ""}
                 {job.salary_text ? ` · ${job.salary_text}` : ""}
               </div>
+            </Link>
+            <div className="flex shrink-0 items-center gap-1">
+              {jobEditable(job.status) ? (
+                <button
+                  aria-label="编辑岗位信息"
+                  title="编辑岗位信息（优化简历前可用）"
+                  onClick={() => setEditing(job)}
+                  className="grid size-9 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <Pencil className="size-4" aria-hidden />
+                </button>
+              ) : null}
+              <button
+                aria-label="删除岗位"
+                title="删除岗位"
+                onClick={() => setDeleting(job)}
+                className="grid size-9 place-items-center rounded-md text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="size-4" aria-hidden />
+              </button>
+              <Badge variant={job.status}>{JOB_STATUS_LABELS[job.status]}</Badge>
             </div>
-            <Badge variant={job.status}>{JOB_STATUS_LABELS[job.status]}</Badge>
-          </Link>
+          </div>
         ))}
         {jobs.data?.length === 0 && (
           <Empty

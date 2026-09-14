@@ -158,11 +158,23 @@ impl AIService {
             resume_id_for_run = Some(resume_id);
         }
         if input.run_type.needs_jd_analysis_input() {
-            let analysis = self.latest_analysis_for_job(&input.job_id)?;
-            if let Some((bytes, sha)) = analysis {
-                atomic_write(&run_dir.join("inputs/jd-analysis.json"), &bytes)?;
-                manifest_inputs.push(json!({ "file": "inputs/jd-analysis.json", "sha256": sha }));
-            }
+            let Some((bytes, sha)) = self.latest_analysis_for_job(&input.job_id)? else {
+                return Err(AppError::Validation(
+                    "该岗位还没有 JD 分析结果，简历优化依赖分析产物，请先运行 JD 分析".into(),
+                ));
+            };
+            atomic_write(&run_dir.join("inputs/jd-analysis.json"), &bytes)?;
+            manifest_inputs.push(json!({ "file": "inputs/jd-analysis.json", "sha256": sha }));
+        }
+
+        // Skill schemas 随 Run 复制：SKILL.md 以 ./schemas/ 相对路径引用 schema
+        let schemas_src = self
+            .layout
+            .skills_dir()
+            .join(input.run_type.skill_name())
+            .join("schemas");
+        if schemas_src.is_dir() {
+            copy_schema_files(&schemas_src, &run_dir, &mut manifest_inputs)?;
         }
 
         let skill_snapshot = json!({ "skill": input.run_type.skill_name() });
@@ -451,11 +463,15 @@ impl AIService {
         };
 
         let mut staged: Vec<(String, PathBuf, String)> = vec![];
+        let mut tailored_md: Option<Vec<u8>> = None;
         for (name, validator) in &required {
             let path = outputs.join(name);
             let bytes = std::fs::read(&path).map_err(|_| {
                 AppError::AIRun(format!("AI 输出缺少必需文件 {name}"))
             })?;
+            if *name == "tailored-resume.md" {
+                tailored_md = Some(bytes.clone());
+            }
             if !validator(&bytes) {
                 return Err(AppError::AIRun(format!("AI 输出 {name} 校验失败")));
             }
@@ -469,7 +485,8 @@ impl AIService {
         }
 
         // 数据库事务
-        let commit_result: AppResult<()> = (|| async {
+        let mut extra_manifest = serde_json::json!({});
+        let commit_result: AppResult<()> = async {
             let mut tx = self.db.begin().await?;
             let now = now_rfc3339();
             for (name, _, sha) in &staged {
@@ -513,20 +530,80 @@ impl AIService {
                     }
                 }
                 AIRunType::ResumeTailoring => {
-                    // tailored 简历创建由命令层（带 UI 提示）在输出入库时执行；
-                    // 这里只记录 artifact，岗位推进到 pending_communication 在用户确认副本后进行。
+                    // spec §10.7：unsupportedClaims 非空不得自动入库；为空则创建
+                    // 岗位版简历（父版本=基础简历）并推进待沟通（§6.1）
+                    let report = std::fs::read(&outputs.join("tailoring-report.json"))
+                        .ok()
+                        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
+                        .unwrap_or(json!({}));
+                    let unsupported: Vec<String> = report
+                        .get("unsupportedClaims")
+                        .and_then(|c| c.as_array())
+                        .map(|arr| {
+                            arr.iter().filter_map(|x| x.as_str().map(String::from)).collect()
+                        })
+                        .unwrap_or_default();
+                    if unsupported.is_empty() {
+                        if let (Some(md), Some(parent_id), Some(job_id)) =
+                            (&tailored_md, &run.resume_id, &run.job_id)
+                        {
+                            let md = String::from_utf8_lossy(md).to_string();
+                            let base_title: Option<String> =
+                                sqlx::query("SELECT title FROM resumes WHERE id = ?")
+                                    .bind(parent_id)
+                                    .fetch_optional(&mut *tx)
+                                    .await?
+                                    .map(|r| r.get::<String, _>("title"));
+                            let title = format!(
+                                "{}（岗位版）",
+                                base_title.unwrap_or_else(|| "简历".into())
+                            );
+                            let new_resume =
+                                crate::application::resume_service::ResumeService::new(
+                                    self.db.clone(),
+                                    self.layout.clone(),
+                                )
+                                .create_tailored(parent_id, job_id, &title, &md)
+                                .await?;
+                            sqlx::query(
+                                "UPDATE jobs SET status = 'pending_communication', active_resume_id = ?, updated_at = ? WHERE id = ? AND status = 'pending_resume_optimization'",
+                            )
+                            .bind(&new_resume.id)
+                            .bind(&now)
+                            .bind(job_id)
+                            .execute(&mut *tx)
+                            .await?;
+                            sqlx::query(
+                                "INSERT INTO job_events (id, job_id, event_type, from_status, to_status, actor, payload_json, occurred_at)
+                                 VALUES (?, ?, 'ai_run_succeeded', 'pending_resume_optimization', 'pending_communication', 'ai', ?, ?)",
+                            )
+                            .bind(new_uuid_v7())
+                            .bind(job_id)
+                            .bind(json!({ "runId": run_id, "resumeId": new_resume.id }).to_string())
+                            .bind(&now)
+                            .execute(&mut *tx)
+                            .await?;
+                        }
+                    } else {
+                        // 不自动入库：run 成功但标记待人工核查（spec §10.7）
+                        extra_manifest = json!({
+                            "pendingUserReview": true,
+                            "unsupportedClaims": unsupported,
+                        });
+                    }
                 }
             }
             sqlx::query(
-                "UPDATE ai_runs SET status = 'succeeded', finished_at = ? WHERE id = ?",
+                "UPDATE ai_runs SET status = 'succeeded', finished_at = ?, output_manifest_json = ? WHERE id = ?",
             )
             .bind(&now)
+            .bind(extra_manifest.to_string())
             .bind(run_id)
             .execute(&mut *tx)
             .await?;
             tx.commit().await?;
             Ok(())
-        })()
+        }
         .await;
 
         match commit_result {
@@ -642,6 +719,34 @@ async fn wait_for_turn_completion(
     }
 }
 
+/// 递归复制 Skill schemas 到 Run 根（保持相对路径），并登记 manifest。
+fn copy_schema_files(
+    src: &std::path::Path,
+    run_dir: &std::path::Path,
+    manifest: &mut Vec<serde_json::Value>,
+) -> AppResult<()> {
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let path = entry.path();
+        let rel = path.strip_prefix(src).unwrap_or(&path);
+        if path.is_dir() {
+            copy_schema_files(&path, run_dir, manifest)?;
+        } else {
+            let dest = run_dir.join("schemas").join(rel);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let bytes = std::fs::read(&path)?;
+            crate::infrastructure::file_repo::atomic_write(&dest, &bytes)?;
+            manifest.push(json!({
+                "file": format!("schemas/{}", rel.display()),
+                "sha256": sha256_hex(&bytes),
+            }));
+        }
+    }
+    Ok(())
+}
+
 fn build_prompt(run_type: AIRunType) -> String {
     let skill = run_type.skill_name();
     match run_type {
@@ -649,7 +754,7 @@ fn build_prompt(run_type: AIRunType) -> String {
             "使用 ${skill}。\n读取 ./inputs/jd.md 和 ./inputs/job.json。\n按 Skill 中的 schema 写入 ./outputs/jd-analysis.json。\n不要修改 inputs，不要写入其他目录。"
         ),
         AIRunType::CompanyResearch => format!(
-            "使用 ${skill}。\n读取 ./inputs/job.json 和 ./inputs/jd.md。\n结合公开网络调研撰写公司调研报告，写入 ./outputs/company-research.md，来源清单写入 ./outputs/company-sources.json。\n不要修改 inputs，不要写入其他目录。"
+            "使用 ${skill}。\n读取 ./inputs/job.json 和 ./inputs/jd.md。\n联网调研一律直接使用内置 web_search 工具完成；不要使用浏览器自动化、不要走 web-access 前置检查流程、不要等待任何人工确认或用户回复。\n撰写公司调研报告写入 ./outputs/company-research.md，来源清单写入 ./outputs/company-sources.json。\n不要修改 inputs，不要写入其他目录。"
         ),
         AIRunType::ResumeTailoring => format!(
             "使用 ${skill}。\n读取 ./inputs/base-resume.md、./inputs/jd.md 和 ./inputs/jd-analysis.json。\n生成完整岗位版简历写入 ./outputs/tailored-resume.md，改写报告写入 ./outputs/tailoring-report.json。\n不得新增候选人未提供的事实；不要修改 inputs，不要写入其他目录。"
