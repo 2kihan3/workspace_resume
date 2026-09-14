@@ -535,7 +535,11 @@ export type SaveResumeInput = { id: string; title: string | null; markdown: stri
  * 跨 IPC 的错误载体（Specta 可导出）。
  */
 export type SerializedError = { code: string; message: string }
-export type SkillInfo = { name: string; description: string; path: string | null; enabled: boolean; error: string | null }
+export type SkillInfo = { name: string; description: string; path: string | null; enabled: boolean; error: string | null; 
+/**
+ * 发现来源目录（工作区 / 本机个人目录等），UI 据此分组
+ */
+cwd: string }
 export type Template = { id: string; name: string; origin: string; version: string; manifest_path: string; preview_path: string | null; enabled: boolean; created_at: string; updated_at: string }
 export type TemplateAssets = { template_html: string; style_css: string; manifest_json: string }
 export type TransitionJobInput = { to_status: JobStatus; reason: string | null }
