@@ -1,6 +1,6 @@
 #!/bin/bash
 # 一键更新已安装的「求职工作台」应用：构建 → 安装 → 清隔离属性
-set -e
+set -eo pipefail
 cd "$(dirname "$0")"
 source ~/.cargo/env
 
