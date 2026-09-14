@@ -358,20 +358,17 @@ impl AIService {
             _ => AIRunType::ResumeTailoring,
         };
 
-        // 独立 thread，cwd 指向 Run 目录（spec §10.5）
+        // 独立 thread，cwd 指向 Run 目录（spec §10.5）。
+        // v2 线格式：thread/start 的 sandbox 是字符串枚举（"workspace-write"），
+        // 可写根默认即 cwd；细粒度策略（网络/可写根）放在 turn/start 的
+        // sandboxPolicy（实测验证，见 ADR-0001）。
         let thread = sup
             .request(
                 "thread/start",
                 json!({
                     "cwd": run_dir_abs.to_string_lossy(),
                     "approvalPolicy": "untrusted",
-                    "sandbox": {
-                        "type": "workspaceWrite",
-                        "writableRoots": [run_dir_abs.to_string_lossy()],
-                        "networkAccess": run_type.needs_network(),
-                        "excludeTmpdirEnvVar": false,
-                        "excludeSlashTmp": false,
-                    }
+                    "sandbox": "workspace-write",
                 }),
             )
             .await
@@ -394,7 +391,15 @@ impl AIService {
                 "turn/start",
                 json!({
                     "threadId": thread_id,
-                    "input": [{ "type": "text", "text": prompt }]
+                    // UserInput text 变体的 text_elements 为必填（可为空数组）
+                    "input": [{ "type": "text", "text": prompt, "text_elements": [] }],
+                    "sandboxPolicy": {
+                        "type": "workspaceWrite",
+                        "writableRoots": [run_dir_abs.to_string_lossy()],
+                        "networkAccess": run_type.needs_network(),
+                        "excludeTmpdirEnvVar": false,
+                        "excludeSlashTmp": false,
+                    }
                 }),
             )
             .await
