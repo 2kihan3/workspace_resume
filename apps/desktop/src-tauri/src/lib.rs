@@ -50,6 +50,8 @@ pub fn run() {
         commands::save_template_preview,
         commands::read_template_preview,
         commands::read_ai_status,
+        commands::get_codex_path_override,
+        commands::set_codex_path_override,
         commands::start_app_server,
         commands::start_login,
         commands::logout,
@@ -144,7 +146,12 @@ pub fn run() {
             });
             tracing::info!("恢复扫描完成: {recovery:?}");
 
-            app.manage(AppState::new(db_shared, layout, ai_service, None));
+            // codex 路径覆盖（设置页可配，文件持久化）
+            let codex_override = std::fs::read_to_string(layout.app_data_dir.join("codex-path.txt"))
+                .ok()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            app.manage(AppState::new(db_shared, layout, ai_service, codex_override));
 
             // App Server 通知 -> turn 桥
             let handle = app.handle().clone();

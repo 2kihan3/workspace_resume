@@ -348,10 +348,40 @@ pub async fn read_template_preview(
 
 // ---- AI ----
 
+/// 读取 codex 路径覆盖（None = 自动发现）。
+#[tauri::command]
+#[specta::specta]
+pub async fn get_codex_path_override(state: State<'_, AppState>) -> Result<Option<String>, SerializedError> {
+    Ok(state.codex_path_override.read().expect("锁中毒").clone())
+}
+
+/// 设置 codex 路径覆盖：空串清除（回到自动发现）；非空校验文件存在。
+#[tauri::command]
+#[specta::specta]
+pub async fn set_codex_path_override(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<(), SerializedError> {
+    let trimmed = path.trim().to_string();
+    if !trimmed.is_empty() && !std::path::Path::new(&trimmed).is_file() {
+        return Err(SerializedError::new("validation", format!("文件不存在：{trimmed}")));
+    }
+    let file = state.layout.app_data_dir.join("codex-path.txt");
+    if trimmed.is_empty() {
+        let _ = std::fs::remove_file(&file);
+    } else {
+        std::fs::write(&file, &trimmed)?;
+    }
+    // 运行时立即生效（读写锁，避免重启应用）
+    *state.codex_path_override.write().expect("codex_path_override 锁中毒") =
+        if trimmed.is_empty() { None } else { Some(trimmed) };
+    Ok(())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn read_ai_status(state: State<'_, AppState>) -> Result<AIServiceStatus, SerializedError> {
-    let codex_path = discover_codex(state.codex_path_override.clone());
+    let codex_path = discover_codex(state.codex_path_override.read().expect("锁中毒").clone());
     let (version, app_server_state, logged_in, email, plan) = {
         let guard = state.ai_service.supervisor.lock().await;
         match guard.as_ref() {
@@ -396,7 +426,7 @@ pub async fn read_ai_status(state: State<'_, AppState>) -> Result<AIServiceStatu
 #[tauri::command]
 #[specta::specta]
 pub async fn start_app_server(state: State<'_, AppState>, app: tauri::AppHandle) -> Result<String, SerializedError> {
-    let Some(codex_path) = discover_codex(state.codex_path_override.clone()) else {
+    let Some(codex_path) = discover_codex(state.codex_path_override.read().expect("锁中毒").clone()) else {
         return Err(SerializedError::new("codex_unavailable", "未找到 codex CLI，请在设置中指定路径"));
     };
     {

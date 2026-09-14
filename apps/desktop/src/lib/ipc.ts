@@ -190,6 +190,9 @@ export const api = {
 
   // ai
   readAIStatus: () => invoke<AIServiceStatus>("read_ai_status"),
+  getCodexPathOverride: () => invoke<string | null>("get_codex_path_override"),
+  setCodexPathOverride: (path: string) =>
+    invoke<void>("set_codex_path_override", { path }),
   startAppServer: () => invoke<string>("start_app_server"),
   startLogin: (mode: "chatgpt" | "apiKey", apiKey?: string) =>
     invoke<LoginStartResult>("start_login", { input: { mode, apiKey } }),

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { SkillInfo } from "../lib/ipc";
+import { Button } from "@jsw/ui";
 import { api } from "../lib/constants";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -73,6 +74,8 @@ function SettingsPage() {
 
   const s = status.data;
   const appInfo = useQuery({ queryKey: ["app-info"], queryFn: api.appInfo, staleTime: Infinity });
+  const codexOverride = useQuery({ queryKey: ["codex-path"], queryFn: api.getCodexPathOverride });
+  const [codexPathInput, setCodexPathInput] = useState<string | null>(null);
   // Codex 把工作区发现的所有 Skill（含全局 ~/.agents/skills）都归在同一 cwd
   // 条目下，cwd 无法区分——按 path 前缀分组：内置 Skill 安装在
   // <app_data>/workspace/.agents/skills，其余为本机个人 Skill。
@@ -98,6 +101,35 @@ function SettingsPage() {
             登录：{s?.logged_in === true ? `已登录（${s.account_email ?? ""} · ${s.plan_type ?? ""}）` : s?.logged_in === false ? "未登录" : "未知"}
           </div>
         </div>
+        <label className="mb-2 flex flex-col gap-1 text-xs text-muted-foreground">
+          codex 路径（留空 = 自动发现；nvm 等非标准安装时在此填写
+          <code>which codex</code>&nbsp;的完整路径）
+          <div className="flex gap-2">
+            <input
+              value={codexPathInput ?? codexOverride.data ?? ""}
+              onChange={(e) => setCodexPathInput(e.target.value)}
+              placeholder="/opt/homebrew/bin/codex"
+              className="h-11 flex-1 rounded-md border border-input bg-card px-3 font-mono text-sm"
+            />
+            <Button
+              variant="outline"
+              disabled={codexPathInput === null || codexPathInput === (codexOverride.data ?? "")}
+              onClick={async () => {
+                try {
+                  await api.setCodexPathOverride((codexPathInput ?? "").trim());
+                  setCodexPathInput(null);
+                  codexOverride.refetch();
+                  status.refetch();
+                  toast.success("codex 路径已保存");
+                } catch (e) {
+                  toast.error((e as Error).message);
+                }
+              }}
+            >
+              保存路径
+            </Button>
+          </div>
+        </label>
         <div className="flex gap-2">
           <button onClick={() => startServer.mutate()} disabled={startServer.isPending}
             className="h-11  rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50">
