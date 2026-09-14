@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import type { SkillInfo } from "../lib/ipc";
 import { api } from "../lib/constants";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -72,11 +73,16 @@ function SettingsPage() {
 
   const s = status.data;
   const appInfo = useQuery({ queryKey: ["app-info"], queryFn: api.appInfo, staleTime: Infinity });
-  // 工作区前缀 = 应用数据目录路径（内置 Skill 的 cwd 都在其下）
-  const workspacePrefix = appInfo.data?.app_data_dir ?? "";
-  const machineSkills = (skills.data ?? []).filter(
-    (sk) => workspacePrefix !== "" && !sk.cwd.startsWith(workspacePrefix),
-  );
+  // Codex 把工作区发现的所有 Skill（含全局 ~/.agents/skills）都归在同一 cwd
+  // 条目下，cwd 无法区分——按 path 前缀分组：内置 Skill 安装在
+  // <app_data>/workspace/.agents/skills，其余为本机个人 Skill。
+  const workspaceSkillsDir = appInfo.data?.app_data_dir
+    ? `${appInfo.data.app_data_dir}/workspace/.agents/skills`
+    : "";
+  const isBuiltin = (sk: SkillInfo) =>
+    workspaceSkillsDir !== "" &&
+    (!!sk.path?.startsWith(workspaceSkillsDir) || (!sk.path && !!sk.error));
+  const machineSkills = (skills.data ?? []).filter((sk) => !isBuiltin(sk));
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
@@ -133,9 +139,7 @@ function SettingsPage() {
         {/* 应用工作区内置 Skill：置顶展开（AI 任务实际使用这三个） */}
         <p className="mb-2 text-xs text-muted-foreground">应用工作区（内置，AI 任务使用）</p>
         <div className="flex flex-col gap-2">
-          {(skills.data ?? [])
-            .filter((sk) => workspacePrefix !== "" && sk.cwd.startsWith(workspacePrefix))
-            .map((sk) => (
+          {(skills.data ?? []).filter(isBuiltin).map((sk) => (
               <div key={sk.name} className="flex items-center justify-between rounded-md bg-card p-3 text-sm outline outline-1 outline-border">
                 <div className="min-w-0">
                   <div className="font-medium">{sk.name}</div>
