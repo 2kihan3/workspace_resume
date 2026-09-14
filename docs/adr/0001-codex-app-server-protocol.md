@@ -29,6 +29,16 @@
 - thread 不跨进程：thread/start 与 turn/start 必须同一 app-server 会话。
 - 端到端验证脚本思路：stdio 驱动 initialize → thread/start → turn/start → 等 `turn/completed`。
 
+## 2026-09-14 补记：审批策略与通知直连
+
+- `approvalPolicy: "untrusted"` 下，服务端对模型请求发出的审批是 **server request**，
+  客户端必须应答；审批 UI 未实现时会死锁（实测：turn 挂满 10 分钟超时、outputs 零产出）。
+  在审批 UI 落地前改用 **`"never"` + workspace-write 沙箱**：沙箱把写入限制在 Run 目录，
+  网络仅调研开启——安全边界由沙箱承担，实测模型可正常读输入/写输出。
+- turn 完成检测改为 **supervisor stdout 读循环直连 `ai::bridge::record_notification`**
+  （原来经 Tauri 事件回环：emit → app.listen → bridge，多一跳且依赖监听注册时机）；
+  Tauri 事件保留用于 UI 流式展示。
+
 ## 影响
 
 - supervisor 为每个请求维护独立超时（默认 180s，`account/read` 15s）。

@@ -367,7 +367,10 @@ impl AIService {
                 "thread/start",
                 json!({
                     "cwd": run_dir_abs.to_string_lossy(),
-                    "approvalPolicy": "untrusted",
+                    // never + workspace-write 沙箱：审批 UI 未实现前，
+                    // untrusted 会让服务端等待审批应答而死锁（实测 turn 挂
+                    // 满 10 分钟超时且零产出）。沙箱已把写入限制在 Run 目录。
+                    "approvalPolicy": "never",
                     "sandbox": "workspace-write",
                 }),
             )

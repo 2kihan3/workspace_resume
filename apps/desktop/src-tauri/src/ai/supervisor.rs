@@ -177,8 +177,10 @@ pub async fn start_supervisor(config: SupervisorConfig) -> Result<SupervisorHand
                     }
                 }
                 (None, Some(method)) => {
-                    // 通知 -> Tauri 事件
+                    // 通知：直连 turn 生命周期桥（关键路径），同时转发 Tauri
+                    // 事件供 UI 展示流式状态——不再依赖事件回环检测 turn 完成
                     let params = msg.get("params").cloned().unwrap_or(Value::Null);
+                    crate::ai::bridge::record_notification(&method, &params);
                     let _ = tauri::Emitter::emit(
                         &app_handle,
                         "app-server-notification",
