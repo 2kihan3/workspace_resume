@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
 import { api, JOB_STATUS_LABELS, JOB_STATUS_ORDER } from "../lib/constants";
-import { Badge, Select } from "@jsw/ui";
+import { Badge, Button, Select } from "@jsw/ui";
 import type { JobStatus } from "../lib/types";
 
 export const Route = createFileRoute("/jobs/$jobId")({ component: JobDetail });
@@ -51,7 +51,7 @@ function JobDetail() {
         ))}
       </div>
 
-      {tab === "概览" && <OverviewTab jobId={jobId} status={j.status} />}
+      {tab === "概览" && <OverviewTab jobId={jobId} status={j.status} goTab={(t) => setTab(t as (typeof TABS)[number])} />}
       {tab === "JD 与分析" && <JdTab jobId={jobId} />}
       {tab === "岗位简历" && <ResumeTab jobId={jobId} />}
       {tab === "沟通" && <CommunicationTab jobId={jobId} />}
@@ -61,11 +61,30 @@ function JobDetail() {
   );
 }
 
-function OverviewTab({ jobId, status }: { jobId: string; status: JobStatus }) {
+function OverviewTab({ jobId, status, goTab }: { jobId: string; status: JobStatus; goTab: (t: string) => void }) {
   const qc = useQueryClient();
   const events = useQuery({ queryKey: ["events", jobId], queryFn: () => api.listJobEvents(jobId) });
   const [target, setTarget] = useState<JobStatus>(status);
   const [reason, setReason] = useState("");
+
+  const analysis = useMutation({
+    mutationFn: () => api.enqueueRun({ run_type: "job_analysis", job_id: jobId }),
+    onSuccess: () => {
+      toast.success("JD 分析任务已入队");
+      qc.invalidateQueries({ queryKey: ["runs", jobId] });
+      goTab("AI 记录");
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const research = useMutation({
+    mutationFn: () => api.enqueueRun({ run_type: "company_research", job_id: jobId }),
+    onSuccess: () => {
+      toast.success("公司调研任务已入队");
+      qc.invalidateQueries({ queryKey: ["runs", jobId] });
+      goTab("AI 记录");
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
   const transition = useMutation({
     mutationFn: () => api.transitionJob(jobId, { to_status: target, reason: reason || null }),
@@ -78,8 +97,51 @@ function OverviewTab({ jobId, status }: { jobId: string; status: JobStatus }) {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  // 下一步主动作（spec §12.3）：按状态引导
+  const next: { title: string; desc: string; primary?: { label: string; onClick: () => void; loading?: boolean }; link?: { label: string; tab: string } } | null =
+    status === "pending_analysis"
+      ? {
+          title: "下一步：分析 JD",
+          desc: "用本机 Codex 解析职责与要求，完成后自动进入待优化简历。",
+          primary: { label: "运行 JD 分析", onClick: () => analysis.mutate(), loading: analysis.isPending },
+          link: { label: research.isPending ? "调研中…" : "同时做公司调研", tab: "__research__" },
+        }
+      : status === "pending_resume_optimization"
+        ? { title: "下一步：生成岗位版简历", desc: "选择基础简历，AI 按这份 JD 定向改写一份完整副本。", link: { label: "去生成岗位版简历", tab: "岗位简历" } }
+        : status === "pending_communication"
+          ? { title: "下一步：记录沟通", desc: "和 HR 聊过后记录一条沟通，进入待投递。", link: { label: "去记录沟通", tab: "沟通" } }
+          : status === "pending_application"
+            ? { title: "下一步：记录投递", desc: "投出简历后记录投递动作，进入面试阶段。", link: { label: "去记录投递", tab: "沟通" } }
+            : status === "interviewing"
+              ? { title: "下一步：管理面试", desc: "添加轮次、记录结果。", link: { label: "去管理面试轮次", tab: "面试" } }
+              : null;
+
   return (
-    <div className="grid grid-cols-2 gap-6">
+    <div className="flex flex-col gap-6">
+      {next && (
+        <section className="flex items-center gap-4 rounded-xl border border-primary/40 bg-accent/60 p-5">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-medium text-accent-foreground">{next.title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{next.desc}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {next.link &&
+              (next.link.tab === "__research__" ? (
+                <Button variant="outline" onClick={() => research.mutate()} disabled={research.isPending}>
+                  {next.link.label}
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => goTab(next.link!.tab)}>{next.link.label}</Button>
+              ))}
+            {next.primary && (
+              <Button onClick={next.primary.onClick} disabled={next.primary.loading}>
+                {next.primary.label}
+              </Button>
+            )}
+          </div>
+        </section>
+      )}
+      <div className="grid grid-cols-2 gap-6">
       <section className="rounded-xl border border-border bg-card p-5">
         <h2 className="mb-3 font-medium">手动调整状态</h2>
         <div className="flex flex-col gap-3">
@@ -126,6 +188,7 @@ function OverviewTab({ jobId, status }: { jobId: string; status: JobStatus }) {
           {events.data?.length === 0 && <li className="text-muted-foreground">暂无事件</li>}
         </ol>
       </section>
+      </div>
     </div>
   );
 }
@@ -151,8 +214,38 @@ function JdTab({ jobId }: { jobId: string }) {
   const research = (artifacts.data ?? []).find((a) => a.name === "company-research.md");
   const sources = (artifacts.data ?? []).find((a) => a.name === "company-sources.json");
 
+  const runAnalysis = useMutation({
+    mutationFn: () => api.enqueueRun({ run_type: "job_analysis", job_id: jobId }),
+    onSuccess: () => {
+      toast.success("JD 分析任务已入队，可到「AI 记录」查看进度");
+      qc.invalidateQueries({ queryKey: ["runs", jobId] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  const runResearch = useMutation({
+    mutationFn: () => api.enqueueRun({ run_type: "company_research", job_id: jobId }),
+    onSuccess: () => {
+      toast.success("公司调研任务已入队（需要网络）");
+      qc.invalidateQueries({ queryKey: ["runs", jobId] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-accent/50 p-3">
+        <span className="text-sm text-muted-foreground">
+          AI 会把 JD 原文和岗位信息发送给本机 Codex 分析。
+        </span>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => runResearch.mutate()} disabled={runResearch.isPending}>
+            公司调研
+          </Button>
+          <Button onClick={() => runAnalysis.mutate()} disabled={runAnalysis.isPending}>
+            {runAnalysis.isPending ? "入队中…" : "运行 JD 分析"}
+          </Button>
+        </div>
+      </div>
       <section className="rounded-xl border border-border bg-card p-5">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="font-medium">原始 JD</h2>
