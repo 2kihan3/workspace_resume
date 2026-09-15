@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { api, JOB_STATUS_LABELS, JOB_STATUS_ORDER } from "../lib/constants";
+import { api, COMM_CHANNELS, channelLabel, JOB_STATUS_LABELS, JOB_STATUS_ORDER } from "../lib/constants";
 import { Badge, Button, Select } from "@jsw/ui";
 import { JobDeleteDialog, JobEditDialog, jobEditable } from "../components/JobDialogs";
 import { Pencil, Trash2 } from "lucide-react";
@@ -423,7 +423,7 @@ function ResumeTab({ jobId }: { jobId: string }) {
 function CommunicationTab({ jobId }: { jobId: string }) {
   const qc = useQueryClient();
   const list = useQuery({ queryKey: ["comms", jobId], queryFn: () => api.listCommunications(jobId) });
-  const [channel, setChannel] = useState("phone");
+  const [channel, setChannel] = useState("boss");
   const [notes, setNotes] = useState("");
   const [contact, setContact] = useState("");
   const [advance, setAdvance] = useState(false);
@@ -446,11 +446,12 @@ function CommunicationTab({ jobId }: { jobId: string }) {
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const [applyChannel, setApplyChannel] = useState("boss");
   const apply = useMutation({
     mutationFn: () =>
       api.addApplication(jobId, {
         applied_at: new Date().toISOString(),
-        channel: "other",
+        channel: applyChannel,
         notes: "",
       }),
     onSuccess: () => {
@@ -469,8 +470,8 @@ function CommunicationTab({ jobId }: { jobId: string }) {
             渠道
             <select value={channel} onChange={(e) => setChannel(e.target.value)}
               className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:ring-ring">
-              {["phone", "email", "wechat", "linkedin", "meeting", "other"].map((c) => (
-                <option key={c} value={c}>{c}</option>
+              {COMM_CHANNELS.map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
               ))}
             </select>
           </label>
@@ -494,6 +495,18 @@ function CommunicationTab({ jobId }: { jobId: string }) {
           </button>
         </div>
         <hr className="my-4 border-border" />
+        <label className="mb-2 flex flex-col gap-1 text-sm">
+          投递渠道
+          <select
+            value={applyChannel}
+            onChange={(e) => setApplyChannel(e.target.value)}
+            className="h-11 w-full rounded-md border border-input bg-card px-3 text-sm"
+          >
+            {COMM_CHANNELS.map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+        </label>
         <button onClick={() => apply.mutate()} disabled={apply.isPending}
           className="inline-flex h-11 w-full items-center justify-center rounded-md border border-input bg-card px-4 text-sm font-medium transition-colors hover:bg-muted">
           记录投递动作（进入面试阶段）
@@ -505,7 +518,7 @@ function CommunicationTab({ jobId }: { jobId: string }) {
         <ol className="flex flex-col gap-2 text-sm">
           {(list.data ?? []).map((c) => (
             <li key={c.id} className="rounded-lg bg-muted/60 p-3">
-              <div>{c.channel}{c.contact_name ? ` · ${c.contact_name}` : ""}</div>
+              <div>{channelLabel(c.channel)}{c.contact_name ? ` · ${c.contact_name}` : ""}</div>
               <div className="text-muted-foreground">{c.notes}</div>
               <div className="text-xs text-muted-foreground">{c.occurred_at}</div>
             </li>
