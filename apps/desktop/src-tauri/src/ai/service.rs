@@ -516,7 +516,14 @@ impl AIService {
                 let (kind, rel) = self.artifact_kind_and_rel(run_type, run, name)?;
                 sqlx::query(
                     "INSERT INTO artifacts (id, job_id, resume_id, ai_run_id, kind, relative_path, sha256, metadata_json, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)",
+                     VALUES (?, ?, ?, ?, ?, ?, ?, '{}', ?)
+                     ON CONFLICT(relative_path) DO UPDATE SET
+                       sha256 = excluded.sha256,
+                       ai_run_id = excluded.ai_run_id,
+                       job_id = excluded.job_id,
+                       resume_id = excluded.resume_id,
+                       kind = excluded.kind,
+                       created_at = excluded.created_at",
                 )
                 .bind(new_uuid_v7())
                 .bind(&run.job_id)

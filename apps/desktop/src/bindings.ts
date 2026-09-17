@@ -492,7 +492,11 @@ export type Artifact = { id: string; job_id: string | null; resume_id: string | 
 export type Communication = { id: string; job_id: string; occurred_at: string; contact_name: string | null; channel: string; notes: string; created_at: string }
 export type CreateJobInput = { company_name: string; role_title: string; jd_markdown: string; source_url: string | null; location: string | null; salary_text: string | null }
 export type DashboardMetrics = { total_active: number; pending: number; interviewing: number; passed: number; rejected: number }
-export type EnqueueAIRunInput = { run_type: AIRunType; job_id: string; resume_id: string | null }
+export type EnqueueAIRunInput = { run_type: AIRunType; job_id: string; resume_id: string | null; 
+/**
+ * JD 分析匹配档：传入基础简历 id 即叠加匹配（只读对照）
+ */
+match_resume_id: string | null }
 export type InterviewRound = { id: string; job_id: string; sequence: number; name: string; status: string; scheduled_at: string | null; format: string | null; interviewer: string | null; notes: string; result: string | null; created_at: string; updated_at: string }
 export type Job = { id: string; company_name: string; role_title: string; status: JobStatus; 
 /**
