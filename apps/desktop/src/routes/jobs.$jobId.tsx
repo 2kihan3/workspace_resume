@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, COMM_CHANNELS, channelLabel, JOB_STATUS_LABELS, JOB_STATUS_ORDER } from "../lib/constants";
 import { Badge, Button, Select } from "@jsw/ui";
 import { JobDeleteDialog, JobEditDialog, jobEditable } from "../components/JobDialogs";
+import { ScorecardView, isJDAnalyst, type JDAnalystResult } from "../components/ScorecardView";
 import { Pencil, Trash2 } from "lucide-react";
 import type { JobStatus } from "../lib/types";
 
@@ -88,16 +89,43 @@ function JobDetail() {
   );
 }
 
+
+/** 达线判定：投 / 慎投偏投 视为可进入简历优化（决策带 <55 或不投不给开） */
+function parseVerdict(artifacts: Array<{ name: string; content: string }> | undefined) {
+  const a = artifacts?.find((x) => x.name === "jd-analysis.json");
+  if (!a) return null;
+  try {
+    const d = JSON.parse(a.content);
+    const sc = d?.score;
+    if (!sc) return null;
+    const band = String(sc.band ?? "");
+    const ok = band.includes("投") && !band.includes("不投") && !band.includes("慎投（");
+    return { total: sc.total as number | undefined, band, ok };
+  } catch {
+    return null;
+  }
+}
+
 function OverviewTab({ jobId, status, goTab }: { jobId: string; status: JobStatus; goTab: (t: string) => void }) {
   const qc = useQueryClient();
   const events = useQuery({ queryKey: ["events", jobId], queryFn: () => api.listJobEvents(jobId) });
   const [target, setTarget] = useState<JobStatus>(status);
   const [reason, setReason] = useState("");
 
+  const resumesQ = useQuery({ queryKey: ["resumes"], queryFn: api.listResumes });
+  const baseResumes = (resumesQ.data ?? []).filter((r) => r.kind === "base");
+  const artifactsQ = useQuery({ queryKey: ["artifacts", jobId], queryFn: () => api.readJobArtifacts(jobId) });
+  const verdict = parseVerdict(artifactsQ.data);
+  const [matchResume, setMatchResume] = useState<string | null>(null);
+  const effectiveMatch = matchResume ?? baseResumes[0]?.id ?? "";
   const analysis = useMutation({
-    mutationFn: () => api.enqueueRun({ run_type: "job_analysis", job_id: jobId }),
+    mutationFn: () => api.enqueueRun({
+      run_type: "job_analysis",
+      job_id: jobId,
+      match_resume_id: effectiveMatch || null,
+    }),
     onSuccess: () => {
-      toast.success("JD 分析任务已入队");
+      toast.success("JD 分析任务已入队（深解+匹配）");
       qc.invalidateQueries({ queryKey: ["runs", jobId] });
       goTab("AI 记录");
     },
@@ -134,7 +162,13 @@ function OverviewTab({ jobId, status, goTab }: { jobId: string; status: JobStatu
           link: { label: research.isPending ? "调研中…" : "同时做公司调研", tab: "__research__" },
         }
       : status === "pending_resume_optimization"
-        ? { title: "下一步：生成岗位版简历", desc: "选择基础简历，AI 按这份 JD 定向改写一份完整副本。", link: { label: "去生成岗位版简历", tab: "岗位简历" } }
+        ? verdict && !verdict.ok
+          ? {
+              title: `分析建议：${verdict.band}（${verdict.total ?? "—"} 分）`,
+              desc: "当前决策带未达线（低于慎投偏投）。建议先按分析报告补足信息或重新分析；仍想优化可手动前往岗位简历 Tab。",
+              link: { label: "查看分析与报告", tab: "JD 与分析" },
+            }
+          : { title: `下一步：生成岗位版简历${verdict ? `（${verdict.band} · ${verdict.total} 分）` : ""}`, desc: "选择基础简历，AI 按这份 JD 定向改写一份完整副本。", link: { label: "去生成岗位版简历", tab: "岗位简历" } }
         : status === "pending_communication"
           ? { title: "下一步：记录沟通", desc: "和 HR 聊过后记录一条沟通，进入待投递。", link: { label: "去记录沟通", tab: "沟通" } }
           : status === "pending_application"
@@ -152,6 +186,18 @@ function OverviewTab({ jobId, status, goTab }: { jobId: string; status: JobStatu
             <p className="mt-1 text-sm text-muted-foreground">{next.desc}</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {status === "pending_analysis" && baseResumes.length > 0 && (
+              <select
+                value={effectiveMatch}
+                onChange={(e) => setMatchResume(e.target.value)}
+                aria-label="匹配基准简历"
+                className="h-9 max-w-44 rounded-md border border-input bg-card px-2 text-sm"
+              >
+                {baseResumes.map((r) => (
+                  <option key={r.id} value={r.id}>匹配：{r.title}</option>
+                ))}
+              </select>
+            )}
             {next.link &&
               (next.link.tab === "__research__" ? (
                 <Button variant="outline" onClick={() => research.mutate()} disabled={research.isPending}>
@@ -238,11 +284,29 @@ function JdTab({ jobId }: { jobId: string }) {
   });
 
   const analysis = (artifacts.data ?? []).find((a) => a.name === "jd-analysis.json");
+  const report = (artifacts.data ?? []).find((a) => a.name === "jd-report.md");
   const research = (artifacts.data ?? []).find((a) => a.name === "company-research.md");
   const sources = (artifacts.data ?? []).find((a) => a.name === "company-sources.json");
+  const resumes = useQuery({ queryKey: ["resumes"], queryFn: api.listResumes });
+  const baseResumes = (resumes.data ?? []).filter((r) => r.kind === "base");
+  const defaultBase = baseResumes[0]?.id ?? "";
+  const [matchResume, setMatchResume] = useState(defaultBase);
+  // 默认选中最新基础简历（列表按 updated_at 倒序）
+  useEffect(() => { if (!matchResume && defaultBase) setMatchResume(defaultBase); }, [defaultBase, matchResume]);
+  let analystData: JDAnalystResult | null = null;
+  if (analysis) {
+    try {
+      const parsed = JSON.parse(analysis.content);
+      if (isJDAnalyst(parsed)) analystData = parsed;
+    } catch { /* 回退旧渲染 */ }
+  }
 
   const runAnalysis = useMutation({
-    mutationFn: () => api.enqueueRun({ run_type: "job_analysis", job_id: jobId }),
+    mutationFn: () => api.enqueueRun({
+      run_type: "job_analysis",
+      job_id: jobId,
+      match_resume_id: matchResume || null,
+    }),
     onSuccess: () => {
       toast.success("JD 分析任务已入队，可到「AI 记录」查看进度");
       qc.invalidateQueries({ queryKey: ["runs", jobId] });
@@ -260,16 +324,27 @@ function JdTab({ jobId }: { jobId: string }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-accent/50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-accent/50 p-3">
         <span className="text-sm text-muted-foreground">
-          AI 会把 JD 原文和岗位信息发送给本机 Codex 分析。
+          默认深解（联网核实公司）；选择基础简历将叠加匹配打分。
         </span>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <select
+            value={matchResume}
+            onChange={(e) => setMatchResume(e.target.value)}
+            aria-label="匹配基准简历"
+            className="h-9 max-w-44 rounded-md border border-input bg-card px-2 text-sm"
+          >
+            <option value="">不带简历（纯深解）</option>
+            {baseResumes.map((r) => (
+              <option key={r.id} value={r.id}>匹配：{r.title}</option>
+            ))}
+          </select>
           <Button variant="outline" onClick={() => runResearch.mutate()} disabled={runResearch.isPending}>
             公司调研
           </Button>
           <Button onClick={() => runAnalysis.mutate()} disabled={runAnalysis.isPending}>
-            {runAnalysis.isPending ? "入队中…" : "运行 JD 分析"}
+            {runAnalysis.isPending ? "入队中…" : matchResume ? "运行 JD 深解+匹配" : "运行 JD 深解"}
           </Button>
         </div>
       </div>
@@ -295,10 +370,22 @@ function JdTab({ jobId }: { jobId: string }) {
         )}
       </section>
 
-      {analysis && (
+      {analysis && analystData && (
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 font-medium">决策打分卡</h2>
+          <ScorecardView data={analystData} />
+        </section>
+      )}
+      {analysis && !analystData && (
         <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-2 font-medium">JD 结构化分析</h2>
           <JDAnalysisView json={analysis.content} />
+        </section>
+      )}
+      {report && (
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-2 font-medium">分析报告</h2>
+          <pre className="max-h-[32rem] overflow-auto whitespace-pre-wrap text-[15px] leading-relaxed">{report.content}</pre>
         </section>
       )}
       {research && (
@@ -361,6 +448,8 @@ function ResumeTab({ jobId }: { jobId: string }) {
   const qc = useQueryClient();
   const resumes = useQuery({ queryKey: ["resumes"], queryFn: api.listResumes });
   const job = useQuery({ queryKey: ["job", jobId], queryFn: () => api.getJob(jobId) });
+  const artifactsQ = useQuery({ queryKey: ["artifacts", jobId], queryFn: () => api.readJobArtifacts(jobId) });
+  const verdict = parseVerdict(artifactsQ.data);
   const [selected, setSelected] = useState<string>("");
 
   const enqueue = useMutation({
@@ -390,14 +479,16 @@ function ResumeTab({ jobId }: { jobId: string }) {
             </select>
           </label>
           <button
-            disabled={!selected || enqueue.isPending}
+            disabled={!selected || enqueue.isPending || verdict === null || !verdict.ok}
+            title={verdict && !verdict.ok ? `分析决策带未达线（${verdict.band}），请先查看分析报告` : verdict === null ? "尚未完成 JD 分析" : ""}
             onClick={() => enqueue.mutate()}
             >
-            运行优化
+            运行优化{verdict ? `（${verdict.band}）` : ""}
           </button>
         </div>
         <p className="mt-2 text-xs text-muted-foreground">
           将发送 inputs/jd.md、inputs/job.json、inputs/base-resume.md 给本机 Codex。
+          {verdict && !verdict.ok ? ` 当前分析决策带「${verdict.band}」未达线，按钮已锁定——请先在「JD 与分析」查看报告或重新分析。` : ""}
         </p>
       </section>
 

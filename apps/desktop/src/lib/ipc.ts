@@ -94,6 +94,8 @@ export interface AIRunInput {
   run_type: "job_analysis" | "company_research" | "resume_tailoring";
   job_id: string;
   resume_id?: string | null;
+  /** JD 分析匹配档：基础简历 id（不传 = 纯深解） */
+  match_resume_id?: string | null;
 }
 
 export interface AIServiceStatus {

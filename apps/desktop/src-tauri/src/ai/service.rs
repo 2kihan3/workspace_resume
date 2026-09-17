@@ -34,14 +34,15 @@ impl AIRunType {
 
     pub fn skill_name(&self) -> &'static str {
         match self {
-            AIRunType::JobAnalysis => "job-jd-analyzer",
+            AIRunType::JobAnalysis => "jd-analyst",
             AIRunType::CompanyResearch => "company-researcher",
             AIRunType::ResumeTailoring => "resume-tailor",
         }
     }
 
     fn needs_network(&self) -> bool {
-        matches!(self, AIRunType::CompanyResearch)
+        // JD 分析默认深解档（联网核实公司信息），调研与优化同前
+        matches!(self, AIRunType::CompanyResearch | AIRunType::JobAnalysis)
     }
 
     fn needs_jd_analysis_input(&self) -> bool {
@@ -54,6 +55,8 @@ pub struct EnqueueAIRunInput {
     pub run_type: AIRunType,
     pub job_id: String,
     pub resume_id: Option<String>,
+    /// JD 分析匹配档：传入基础简历 id 即叠加匹配（只读对照）
+    pub match_resume_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
@@ -140,6 +143,22 @@ impl AIService {
         }));
 
         let mut resume_id_for_run: Option<String> = None;
+        if input.run_type == AIRunType::JobAnalysis {
+            // 匹配档：inputs 出现简历即按 jd-analyst 的匹配语义执行（只读对照）
+            if let Some(rid) = &input.match_resume_id {
+                let resume = crate::application::resume_service::ResumeService::new(
+                    self.db.clone(),
+                    self.layout.clone(),
+                )
+                .read_resume(rid)
+                .await?;
+                atomic_write(&run_dir.join("inputs/base-resume.md"), resume.markdown.as_bytes())?;
+                manifest_inputs.push(json!({
+                    "file": "inputs/base-resume.md",
+                    "sha256": sha256_hex(resume.markdown.as_bytes()),
+                }));
+            }
+        }
         if input.run_type == AIRunType::ResumeTailoring {
             let resume_id = input.resume_id.clone().ok_or_else(|| {
                 AppError::Validation("简历优化必须指定基础简历".into())
@@ -167,14 +186,17 @@ impl AIService {
             manifest_inputs.push(json!({ "file": "inputs/jd-analysis.json", "sha256": sha }));
         }
 
-        // Skill schemas 随 Run 复制：SKILL.md 以 ./schemas/ 相对路径引用 schema
-        let schemas_src = self
-            .layout
-            .skills_dir()
-            .join(input.run_type.skill_name())
-            .join("schemas");
-        if schemas_src.is_dir() {
-            copy_schema_files(&schemas_src, &run_dir, &mut manifest_inputs)?;
+        // Skill 支撑目录随 Run 复制：SKILL.md 以 ./schemas/、./references/
+        // 相对路径引用规则表与 schema
+        for dir in ["schemas", "references"] {
+            let src = self
+                .layout
+                .skills_dir()
+                .join(input.run_type.skill_name())
+                .join(dir);
+            if src.is_dir() {
+                copy_schema_files(&src, &run_dir, &mut manifest_inputs)?;
+            }
         }
 
         let skill_snapshot = json!({ "skill": input.run_type.skill_name() });
@@ -451,6 +473,7 @@ impl AIService {
         let required: Vec<(&str, fn(&[u8]) -> bool)> = match run_type {
             AIRunType::JobAnalysis => vec![
                 ("jd-analysis.json", |b| serde_json::from_slice::<serde_json::Value>(b).is_ok()),
+                ("jd-report.md", |b| !b.is_empty()),
             ],
             AIRunType::CompanyResearch => vec![
                 ("company-research.md", |b| !b.is_empty()),
@@ -751,7 +774,7 @@ fn build_prompt(run_type: AIRunType) -> String {
     let skill = run_type.skill_name();
     match run_type {
         AIRunType::JobAnalysis => format!(
-            "使用 ${skill}。\n读取 ./inputs/jd.md 和 ./inputs/job.json。\n按 Skill 中的 schema 写入 ./outputs/jd-analysis.json。\n不要修改 inputs，不要写入其他目录。"
+            "使用 ${skill}，默认执行深解档（联网核实公司信息与口碑，直接用内置 web_search 工具，禁浏览器自动化与 web-access 流程，不等待人工确认）。\n读取 ./inputs/jd.md、./inputs/job.json 和 ./references/ 下的规则表。\n若 ./inputs/base-resume.md 存在则叠加匹配档（对照该基础简历，只读分析，不改写简历）。\n按 ./references/output-schema.md 写入 ./outputs/jd-analysis.json，并写一份人读报告 ./outputs/jd-report.md（按 Skill 报告骨架）。\n不要修改 inputs，不要写入其他目录。"
         ),
         AIRunType::CompanyResearch => format!(
             "使用 ${skill}。\n读取 ./inputs/job.json 和 ./inputs/jd.md。\n联网调研一律直接使用内置 web_search 工具完成；不要使用浏览器自动化、不要走 web-access 前置检查流程、不要等待任何人工确认或用户回复。\n撰写公司调研报告写入 ./outputs/company-research.md，来源清单写入 ./outputs/company-sources.json。\n不要修改 inputs，不要写入其他目录。"
