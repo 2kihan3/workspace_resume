@@ -10,6 +10,14 @@ pub fn sync_builtin_skills(packaged_dir: &Path, layout: &PathLayout) -> Result<(
     }
     let skills_dir = layout.skills_dir();
     std::fs::create_dir_all(&skills_dir)?;
+    // 清理已停用的内置 Skill（升级遗留；用户导入的不在此列）
+    for legacy in ["job-jd-analyzer"] {
+        let dir = skills_dir.join(legacy);
+        if dir.is_dir() {
+            std::fs::remove_dir_all(&dir)?;
+            tracing::info!("已移除停用内置 Skill: {legacy}");
+        }
+    }
     for entry in std::fs::read_dir(packaged_dir)?.filter_map(|e| e.ok()) {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with('.') {
