@@ -6,6 +6,7 @@ import { api, COMM_CHANNELS, channelLabel, JOB_STATUS_LABELS, JOB_STATUS_ORDER }
 import { Badge, Button, Dialog, DialogCloseButton, DialogContent, DialogHeader, DialogTitle, Select } from "@jsw/ui";
 import { JobDeleteDialog, JobEditDialog, jobEditable } from "../components/JobDialogs";
 import { ScorecardView, isJDAnalyst, type JDAnalystResult } from "../components/ScorecardView";
+import { ReviewCardView, type InterviewReviewData } from "../components/ReviewCardView";
 import { FileAudio, FileText, File as FileIcon, Pencil, Trash2, Upload } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import type { InterviewRound, JobStatus } from "../lib/types";
@@ -880,20 +881,38 @@ function InterviewMaterials({ jobId, rounds }: { jobId: string; rounds: Intervie
         </div>
       </div>
 
-      {/* 历史复盘产物 */}
-      {(reviews.data ?? []).length > 0 && (
-        <div className="mt-3 flex flex-col gap-2">
-          <div className="text-sm font-medium">复盘产物</div>
-          {(reviews.data ?? []).map((f) => (
-            <div key={f.name} className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 p-2 text-sm">
-              <span className="min-w-0 truncate">{f.name}</span>
-              <Button size="sm" variant="ghost" onClick={() => setPreview({ name: f.name, text: f.content })}>
-                查看
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* 复盘产物：JSON → 打分卡可视化；报告/感谢信/逐字稿 → 查看弹窗 */}
+      {(reviews.data ?? []).length > 0 && (() => {
+        const files = reviews.data ?? [];
+        const jsonFile = files.find((f) => f.name === "interview-review.json");
+        let reviewData: InterviewReviewData | null = null;
+        if (jsonFile) {
+          try { reviewData = JSON.parse(jsonFile.content); } catch { /* 回退文件列表 */ }
+        }
+        const others = files.filter((f) => f !== jsonFile);
+        return (
+          <div className="mt-3 flex flex-col gap-3">
+            <div className="text-sm font-medium">复盘结果</div>
+            {reviewData ? (
+              <ReviewCardView data={reviewData} />
+            ) : (
+              <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                复盘产物存在但 JSON 无法解析，请通过文件查看。
+              </div>
+            )}
+            {others.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {others.map((f) => (
+                  <Button key={f.name} size="sm" variant="outline"
+                    onClick={() => setPreview({ name: f.name, text: f.content })}>
+                    {f.name === "follow-up-email.md" ? "感谢信草稿" : f.name}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)} ariaLabel="材料预览" className="max-w-3xl">
         <DialogHeader>
