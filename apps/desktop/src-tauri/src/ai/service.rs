@@ -289,6 +289,98 @@ impl AIService {
         Ok(rows.iter().map(Self::row_to_run).collect())
     }
 
+    /// 读取 Run 的输出文件内容（限 outputs/ 内、无路径穿越）。
+    pub async fn read_run_output(&self, run_id: &str, name: &str) -> AppResult<String> {
+        if name.contains('/') || name.contains("..") || name.is_empty() {
+            return Err(AppError::Validation(format!("非法输出文件名：{name}")));
+        }
+        let run = self.get_run(run_id).await?;
+        let path = self.layout.resolve(&run.workdir_path)?.join("outputs").join(name);
+        if !path.is_file() {
+            return Err(AppError::NotFound(format!("输出文件不存在：{name}")));
+        }
+        Ok(std::fs::read_to_string(path)?)
+    }
+
+    /// 人工确认施工稿入库（pendingUserReview 闭环的人工拍板侧）。
+    pub async fn confirm_tailoring_import(&self, run_id: &str) -> AppResult<crate::domain::Resume> {
+        let run = self.get_run(run_id).await?;
+        if run.run_type != "resume_tailoring" || run.status != "succeeded" {
+            return Err(AppError::Validation("仅简历优化的成功任务可确认入库".into()));
+        }
+        let manifest: serde_json::Value =
+            serde_json::from_str(&run.output_manifest_json.unwrap_or_default()).unwrap_or(json!({}));
+        if !manifest.get("pendingUserReview").and_then(|v| v.as_bool()).unwrap_or(false) {
+            return Err(AppError::Validation("该任务不处于待核查状态".into()));
+        }
+        let parent_id = run
+            .resume_id
+            .clone()
+            .ok_or_else(|| AppError::Validation("任务缺少基础简历关联".into()))?;
+        let job_id = run
+            .job_id
+            .clone()
+            .ok_or_else(|| AppError::Validation("任务缺少岗位关联".into()))?;
+
+        let md = self.read_run_output(run_id, "resume-tailored.md").await?;
+        let md = strip_empty_section_headings(&md);
+
+        let (base_title,): (String,) = sqlx::query_as("SELECT title FROM resumes WHERE id = ?")
+            .bind(&parent_id)
+            .fetch_one(&*self.db)
+            .await?;
+        let title = format!("{base_title}（岗位版·施工稿）");
+        let resume = crate::application::resume_service::ResumeService::new(
+            self.db.clone(),
+            self.layout.clone(),
+        )
+        .create_tailored(&parent_id, &job_id, &title, &md)
+        .await?;
+
+        // 状态推进（若仍在待优化简历）+ 设为生效简历 + 事件
+        let now = now_rfc3339();
+        if sqlx::query(
+            "UPDATE jobs SET status = 'pending_communication', active_resume_id = ?, updated_at = ? WHERE id = ? AND status = 'pending_resume_optimization'",
+        )
+        .bind(&resume.id)
+        .bind(&now)
+        .bind(&job_id)
+        .execute(&*self.db)
+        .await?
+        .rows_affected()
+            == 0
+        {
+            // 已越过该阶段（如手动推进），仅更新生效简历
+            sqlx::query("UPDATE jobs SET active_resume_id = ?, updated_at = ? WHERE id = ?")
+                .bind(&resume.id)
+                .bind(&now)
+                .bind(&job_id)
+                .execute(&*self.db)
+                .await?;
+        } else {
+            sqlx::query(
+                "INSERT INTO job_events (id, job_id, event_type, from_status, to_status, actor, payload_json, occurred_at)
+                 VALUES (?, ?, 'resume_tailoring_confirmed', 'pending_resume_optimization', 'pending_communication', 'user', ?, ?)",
+            )
+            .bind(new_uuid_v7())
+            .bind(&job_id)
+            .bind(json!({ "runId": run_id, "resumeId": resume.id }).to_string())
+            .bind(&now)
+            .execute(&*self.db)
+            .await?;
+        }
+
+        // manifest 标记已确认
+        sqlx::query("UPDATE ai_runs SET output_manifest_json = ? WHERE id = ?")
+            .bind(
+                json!({ "userConfirmed": true, "confirmedAt": now }).to_string(),
+            )
+            .bind(run_id)
+            .execute(&*self.db)
+            .await?;
+        Ok(resume)
+    }
+
     pub async fn cancel_run(&self, run_id: &str) -> AppResult<()> {
         let run = self.get_run(run_id).await?;
         if run.status != "queued" && run.status != "running" && run.status != "waiting_approval" {
@@ -762,6 +854,31 @@ async fn wait_for_turn_completion(
             return Err("turn 等待超时（10 分钟）".into());
         }
     }
+}
+
+/// 清洗空壳章节：section 内只剩一个标题行时去掉标题（避免模板渲染空标题）。
+pub fn strip_empty_section_headings(md: &str) -> String {
+    let marker = regex::Regex::new(r#"<!-- resume-section id="[a-z0-9-]+" -->"#).unwrap();
+    let heading = regex::Regex::new(r"^#{1,6}\s").unwrap();
+    let mut out = String::with_capacity(md.len());
+    let mut rest = md;
+    while let Some(m) = marker.find(rest) {
+        out.push_str(&rest[..m.end()]);
+        rest = &rest[m.end()..];
+        let next = marker.find(rest);
+        let seg = &rest[..next.map(|n| n.start()).unwrap_or(rest.len())];
+        let lines: Vec<&str> = seg.lines().filter(|l| !l.trim().is_empty()).collect();
+        if lines.len() == 1 && heading.is_match(lines[0]) {
+            out.push('\n');
+        } else {
+            out.push_str(seg);
+        }
+        rest = &rest[next.map(|n| n.start()).unwrap_or(rest.len())..];
+        if next.is_none() {
+            break;
+        }
+    }
+    out
 }
 
 /// 递归复制 Skill schemas 到 Run 根（保持相对路径），并登记 manifest。

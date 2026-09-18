@@ -207,6 +207,10 @@ export const api = {
   deleteSkill: (name: string) => invoke<void>("delete_skill", { name }),
   enqueueRun: (input: AIRunInput) => invoke<AIRun>("enqueue_run", { input }),
   cancelRun: (id: string) => invoke<void>("cancel_run", { id }),
+  readRunOutput: (runId: string, name: string) =>
+    invoke<string>("read_run_output", { runId, name }),
+  confirmTailoringImport: (runId: string) =>
+    invoke<Resume>("confirm_tailoring_import", { runId }),
   listRuns: (jobId?: string | null) => invoke<AIRun[]>("list_runs", { jobId }),
   readJobArtifacts: (jobId: string) => invoke<RunOutput[]>("read_job_artifacts", { jobId }),
   listArtifacts: (jobId: string) => invoke<Artifact[]>("list_artifacts", { jobId }),

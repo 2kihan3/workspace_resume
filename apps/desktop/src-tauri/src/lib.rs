@@ -61,6 +61,8 @@ pub fn run() {
         commands::delete_skill,
         commands::enqueue_run,
         commands::cancel_run,
+        commands::read_run_output,
+        commands::confirm_tailoring_import,
         commands::list_runs,
         commands::read_job_artifacts,
         commands::list_artifacts,

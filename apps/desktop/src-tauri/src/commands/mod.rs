@@ -666,6 +666,18 @@ pub async fn enqueue_run(state: State<'_, AppState>, input: EnqueueAIRunInput) -
 
 #[tauri::command]
 #[specta::specta]
+pub async fn read_run_output(state: State<'_, AppState>, run_id: String, name: String) -> Result<String, SerializedError> {
+    Ok(state.ai_service.read_run_output(&run_id, &name).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn confirm_tailoring_import(state: State<'_, AppState>, run_id: String) -> Result<Resume, SerializedError> {
+    Ok(state.ai_service.confirm_tailoring_import(&run_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn cancel_run(state: State<'_, AppState>, id: String) -> Result<(), SerializedError> {
     Ok(state.ai_service.cancel_run(&id).await?)
 }

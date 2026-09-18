@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { api, COMM_CHANNELS, channelLabel, JOB_STATUS_LABELS, JOB_STATUS_ORDER } from "../lib/constants";
-import { Badge, Button, Select } from "@jsw/ui";
+import { Badge, Button, Dialog, DialogCloseButton, DialogContent, DialogHeader, DialogTitle, Select } from "@jsw/ui";
 import { JobDeleteDialog, JobEditDialog, jobEditable } from "../components/JobDialogs";
 import { ScorecardView, isJDAnalyst, type JDAnalystResult } from "../components/ScorecardView";
 import { Pencil, Trash2 } from "lucide-react";
@@ -116,6 +116,13 @@ function OverviewTab({ jobId, status, goTab }: { jobId: string; status: JobStatu
   const baseResumes = (resumesQ.data ?? []).filter((r) => r.kind === "base");
   const artifactsQ = useQuery({ queryKey: ["artifacts", jobId], queryFn: () => api.readJobArtifacts(jobId) });
   const verdict = parseVerdict(artifactsQ.data);
+  const runsQ = useQuery({ queryKey: ["runs", jobId], queryFn: () => api.listRuns(jobId) });
+  const pendingReview = (() => {
+    const r = (runsQ.data ?? []).find(
+      (x) => x.run_type === "resume_tailoring" && parseReview(x),
+    );
+    return r ? parseReview(r) : null;
+  })();
   const [matchResume, setMatchResume] = useState<string | null>(null);
   const effectiveMatch = matchResume ?? baseResumes[0]?.id ?? "";
   const analysis = useMutation({
@@ -179,6 +186,17 @@ function OverviewTab({ jobId, status, goTab }: { jobId: string; status: JobStatu
 
   return (
     <div className="flex flex-col gap-6">
+      {pendingReview && (
+        <section className="flex items-center gap-4 rounded-xl border border-amber-400/50 bg-status-amber/40 p-5">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-medium">简历施工稿待核查（{pendingReview.length} 条声明）</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              模型标记了待确认/缺失的声明，未自动入库。请到「AI 记录」查看施工稿并人工拍板。
+            </p>
+          </div>
+          <Button onClick={() => goTab("AI 记录")}>去核查</Button>
+        </section>
+      )}
       {next && (
         <section className="flex items-center gap-4 rounded-xl border border-primary/40 bg-accent/60 p-5">
           <div className="min-w-0 flex-1">
@@ -450,6 +468,7 @@ function ResumeTab({ jobId }: { jobId: string }) {
   const job = useQuery({ queryKey: ["job", jobId], queryFn: () => api.getJob(jobId) });
   const artifactsQ = useQuery({ queryKey: ["artifacts", jobId], queryFn: () => api.readJobArtifacts(jobId) });
   const verdict = parseVerdict(artifactsQ.data);
+
   const [selected, setSelected] = useState<string>("");
 
   const enqueue = useMutation({
@@ -710,6 +729,64 @@ function InterviewTab({ jobId }: { jobId: string }) {
   );
 }
 
+/** 解析 run 的 pendingUserReview 待核查声明 */
+function parseReview(run: { run_type: string; status: string; output_manifest_json: string | null }): string[] | null {
+  if (run.run_type !== "resume_tailoring" || run.status !== "succeeded" || !run.output_manifest_json) return null;
+  try {
+    const m = JSON.parse(run.output_manifest_json);
+    if (m?.pendingUserReview && Array.isArray(m.unsupportedClaims)) return m.unsupportedClaims as string[];
+  } catch { /* ignore */ }
+  return null;
+}
+
+/** 施工稿人工核查：声明清单 + 查看施工稿 + 确认入库 */
+function TailoringReview({ runId, claims }: { runId: string; claims: string[] }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const confirm = useMutation({
+    mutationFn: () => api.confirmTailoringImport(runId),
+    onSuccess: (r) => {
+      toast.success(`已入库：${r.title}，可在简历库查看`);
+      qc.invalidateQueries({ queryKey: ["runs"] });
+      qc.invalidateQueries({ queryKey: ["resumes"] });
+      qc.invalidateQueries({ queryKey: ["job"] });
+      qc.invalidateQueries({ queryKey: ["jobs"] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <div className="font-medium">简历施工稿待人工核查（{claims.length} 条声明被模型标记）</div>
+      <ul className="list-disc pl-5 text-muted-foreground">
+        {claims.map((c, i) => <li key={i}>{c}</li>)}
+      </ul>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" onClick={async () => {
+          if (draft === null) setDraft(await api.readRunOutput(runId, "resume-tailored.md").catch(() => null));
+          setOpen(true);
+        }}>
+          查看施工稿
+        </Button>
+        <Button size="sm" onClick={() => confirm.mutate()} disabled={confirm.isPending}>
+          确认入库（人工拍板）
+        </Button>
+      </div>
+      {open && draft !== null && (
+        <Dialog open={open} onOpenChange={setOpen} ariaLabel="查看施工稿" className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>resume-tailored.md</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogContent>
+            <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed">{draft}</pre>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
 function AIRunsTab({ jobId }: { jobId: string }) {
   const qc = useQueryClient();
   const runs = useQuery({ queryKey: ["runs", jobId], queryFn: () => api.listRuns(jobId) });
@@ -757,10 +834,13 @@ function AIRunsTab({ jobId }: { jobId: string }) {
             </tr>
           </thead>
           <tbody>
-            {(runs.data ?? []).map((r) => (
-              <tr key={r.id} className="border-t border-border">
+            {(runs.data ?? []).map((r) => {
+              const review = parseReview(r);
+              return (
+              <Fragment key={r.id}>
+              <tr className="border-t border-border">
                 <td className="py-2">{runType(r.run_type)}</td>
-                <td>{runStatus(r.status)}</td>
+                <td>{runStatus(r.status)}{review && <Badge variant="pending_application" className="ml-1">待核查</Badge>}</td>
                 <td className="text-muted-foreground">{r.queued_at}</td>
                 <td className="text-destructive">{r.error_message ?? ""}</td>
                 <td className="text-right">
@@ -771,7 +851,16 @@ function AIRunsTab({ jobId }: { jobId: string }) {
                   )}
                 </td>
               </tr>
-            ))}
+              {review && (
+                <tr className="border-t border-border bg-accent/40">
+                  <td colSpan={5} className="p-3">
+                    <TailoringReview runId={r.id} claims={review} />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
+              );
+            })}
             {runs.data?.length === 0 && (
               <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">暂无任务</td></tr>
             )}
