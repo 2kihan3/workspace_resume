@@ -10,7 +10,7 @@ use crate::application::job_service::{
 use crate::application::resume_service::{ResumeService, SaveResumeInput};
 use crate::application::template_service::TemplateService;
 use crate::application::resume_service::ResumeContent;
-use crate::domain::{AIRun, Artifact, Application, Communication, InterviewRound, Job, JobEvent, JobSummary, Resume, Template};
+use crate::domain::{AIRun, Artifact, Application, Communication, InterviewMaterial, InterviewRound, Job, JobEvent, JobSummary, Resume, Template};
 use crate::infrastructure::errors::SerializedError;
 use crate::infrastructure::file_repo::recover_pending_files;
 use crate::state::AppState;
@@ -127,6 +127,30 @@ pub async fn list_interviews(state: State<'_, AppState>, id: String) -> Result<V
 #[specta::specta]
 pub async fn reorder_interview(state: State<'_, AppState>, id: String, interview_id: String, new_sequence: i32) -> Result<(), SerializedError> {
     Ok(job_service(&state).reorder_interview(&id, &interview_id, new_sequence).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn add_interview_material(state: State<'_, AppState>, job_id: String, round_id: Option<String>, path: String) -> Result<InterviewMaterial, SerializedError> {
+    Ok(job_service(&state).add_interview_material(&job_id, round_id, &path).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn list_interview_materials(state: State<'_, AppState>, job_id: String) -> Result<Vec<InterviewMaterial>, SerializedError> {
+    Ok(job_service(&state).list_interview_materials(&job_id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_interview_material(state: State<'_, AppState>, id: String) -> Result<(), SerializedError> {
+    Ok(job_service(&state).delete_interview_material(&id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn read_material_text(state: State<'_, AppState>, id: String) -> Result<String, SerializedError> {
+    Ok(job_service(&state).read_material_text(&id).await?)
 }
 
 #[tauri::command]

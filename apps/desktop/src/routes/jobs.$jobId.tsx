@@ -6,8 +6,9 @@ import { api, COMM_CHANNELS, channelLabel, JOB_STATUS_LABELS, JOB_STATUS_ORDER }
 import { Badge, Button, Dialog, DialogCloseButton, DialogContent, DialogHeader, DialogTitle, Select } from "@jsw/ui";
 import { JobDeleteDialog, JobEditDialog, jobEditable } from "../components/JobDialogs";
 import { ScorecardView, isJDAnalyst, type JDAnalystResult } from "../components/ScorecardView";
-import { Pencil, Trash2 } from "lucide-react";
-import type { JobStatus } from "../lib/types";
+import { FileAudio, FileText, File as FileIcon, Pencil, Trash2, Upload } from "lucide-react";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import type { InterviewRound, JobStatus } from "../lib/types";
 
 export const Route = createFileRoute("/jobs/$jobId")({ component: JobDetail });
 
@@ -725,7 +726,136 @@ function InterviewTab({ jobId }: { jobId: string }) {
           {list.data?.length === 0 && <li className="text-sm text-muted-foreground">暂无面试轮次</li>}
         </ol>
       </section>
+
+      <InterviewMaterials jobId={jobId} rounds={list.data ?? []} />
     </div>
+  );
+}
+
+function fmtSize(n: number): string {
+  if (n > 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n > 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${n} B`;
+}
+
+/** 面经材料：录音/文档上传与管理；AI 复盘入口预留（Skill 由用户单独开发） */
+function InterviewMaterials({ jobId, rounds }: { jobId: string; rounds: InterviewRound[] }) {
+  const qc = useQueryClient();
+  const materials = useQuery({
+    queryKey: ["interview-materials", jobId],
+    queryFn: () => api.listInterviewMaterials(jobId),
+  });
+  const [roundSel, setRoundSel] = useState("");
+  const [preview, setPreview] = useState<{ name: string; text: string } | null>(null);
+
+  const upload = async () => {
+    const files = await openFileDialog({
+      multiple: true,
+      directory: false,
+      title: "选择录音或文档",
+    });
+    const list = Array.isArray(files) ? files : files ? [files] : [];
+    for (const f of list) {
+      if (typeof f !== "string") continue;
+      try {
+        await api.addInterviewMaterial(jobId, roundSel || null, f);
+      } catch (e) {
+        toast.error(`上传失败（${f.split("/").pop()}）：${(e as Error).message}`);
+      }
+    }
+    if (list.length) {
+      toast.success(`已上传 ${list.length} 个材料`);
+      qc.invalidateQueries({ queryKey: ["interview-materials", jobId] });
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-5">
+      <div className="mb-1 flex items-center justify-between">
+        <h2 className="font-medium">面经材料</h2>
+        <Button size="sm" variant="outline" onClick={upload}>
+          <Upload data-icon="inline-start" /> 上传录音 / 文档
+        </Button>
+      </div>
+      <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+        关联轮次（可选）：
+        <select value={roundSel} onChange={(e) => setRoundSel(e.target.value)}
+          className="h-8 rounded-md border border-input bg-card px-2 text-sm">
+          <option value="">不关联</option>
+          {rounds.map((r) => <option key={r.id} value={r.id}>第 {r.sequence} 轮 · {r.name}</option>)}
+        </select>
+        <span>文件保存在本机应用数据目录，随岗位删除。</span>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {(materials.data ?? []).map((m) => {
+          const round = rounds.find((r) => r.id === m.round_id);
+          return (
+            <div key={m.id} className="flex items-center gap-3 rounded-lg bg-muted/50 p-3 text-sm">
+              {m.kind === "audio" ? <FileAudio className="size-4 shrink-0 text-primary" aria-hidden />
+                : m.kind === "doc" ? <FileText className="size-4 shrink-0 text-primary" aria-hidden />
+                : <FileIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium" title={m.file_name}>{m.file_name}</div>
+                <div className="text-xs text-muted-foreground">
+                  {m.kind === "audio" ? "录音" : m.kind === "doc" ? "文档" : "文件"} · {fmtSize(m.size_bytes)}
+                  {round ? ` · 第 ${round.sequence} 轮` : ""} · {m.created_at.slice(0, 16)}
+                </div>
+              </div>
+              {m.kind === "doc" && /\.(md|txt)$/i.test(m.file_name) && (
+                <Button size="sm" variant="ghost" onClick={async () => {
+                  try {
+                    const text = await api.readMaterialText(m.id);
+                    setPreview({ name: m.file_name, text });
+                  } catch (e) { toast.error((e as Error).message); }
+                }}>查看</Button>
+              )}
+              <button aria-label="删除材料" title="删除"
+                onClick={async () => {
+                  if (!window.confirm(`删除材料「${m.file_name}」？`)) return;
+                  await api.deleteInterviewMaterial(m.id);
+                  qc.invalidateQueries({ queryKey: ["interview-materials", jobId] });
+                }}
+                className="grid size-9 place-items-center rounded-md text-destructive hover:bg-destructive/10">
+                <Trash2 className="size-4" aria-hidden />
+              </button>
+            </div>
+          );
+        })}
+        {(materials.data ?? []).length === 0 && (
+          <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            还没有材料。面试后上传录音（mp3/m4a/wav…）或面经文档（md/txt/docx/pdf），
+            为 AI 复盘做准备。
+          </div>
+        )}
+      </div>
+
+      {/* AI 复盘预留位：Skill 由用户单独开发后接线 */}
+      <div className="mt-4 rounded-lg border border-dashed border-primary/40 bg-accent/40 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-sm font-medium">AI 面试复盘</div>
+            <p className="text-xs text-muted-foreground">
+              基于轮次记录与上述材料生成复盘（问题清单/回答评估/改进建议）。
+              入口已预留，等待面试复盘 Skill（用户自研）接入后启用。
+            </p>
+          </div>
+          <Button size="sm" disabled title="面试复盘 Skill 开发中">
+            开始复盘（即将上线）
+          </Button>
+        </div>
+      </div>
+
+      <Dialog open={!!preview} onOpenChange={() => setPreview(null)} ariaLabel="材料预览" className="max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>{preview?.name}</DialogTitle>
+          <DialogCloseButton />
+        </DialogHeader>
+        <DialogContent>
+          <pre className="whitespace-pre-wrap text-sm leading-relaxed">{preview?.text}</pre>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }
 

@@ -1,7 +1,7 @@
 //! 岗位用例服务（spec §6）。状态变化与事件写入必须在同一事务。
 
 use crate::domain::status::{classify_transition, Actor, JobStatus, TransitionKind};
-use crate::domain::{new_uuid_v7, now_rfc3339, Application, Communication, InterviewRound, Job, JobEvent, JobSummary};
+use crate::domain::{new_uuid_v7, now_rfc3339, Application, Communication, InterviewMaterial, InterviewRound, Job, JobEvent, JobSummary};
 use crate::infrastructure::db::Db;
 use crate::infrastructure::errors::{AppError, AppResult};
 use crate::infrastructure::file_repo::atomic_write;
@@ -741,6 +741,150 @@ impl JobService {
         }
         tx.commit().await?;
         Ok(())
+    }
+
+    // ---- 面经材料 ----
+
+    fn material_kind(file_name: &str) -> &'static str {
+        const AUDIO_EXT: [&str; 6] = ["mp3", "wav", "m4a", "aac", "flac", "ogg"];
+        const DOC_EXT: [&str; 6] = ["md", "markdown", "txt", "docx", "pdf", "rtf"];
+        let ext = file_name.rsplit('.').next().unwrap_or("").to_lowercase();
+        if AUDIO_EXT.contains(&ext.as_str()) {
+            "audio"
+        } else if DOC_EXT.contains(&ext.as_str()) {
+            "doc"
+        } else {
+            "other"
+        }
+    }
+
+    /// 上传材料：复制进 workspace/jobs/<id>/interviews/materials/。
+    pub async fn add_interview_material(
+        &self,
+        job_id: &str,
+        round_id: Option<String>,
+        source_path: &str,
+    ) -> AppResult<InterviewMaterial> {
+        Self::fetch_job(&self.db, job_id).await?;
+        if let Some(rid) = &round_id {
+            let ok: Option<(i64,)> =
+                sqlx::query_as("SELECT 1 FROM interview_rounds WHERE id = ? AND job_id = ?")
+                    .bind(rid)
+                    .bind(job_id)
+                    .fetch_optional(&*self.db)
+                    .await?;
+            if ok.is_none() {
+                return Err(AppError::Validation("面试轮次不存在或不属于该岗位".into()));
+            }
+        }
+        let src = std::path::Path::new(source_path);
+        if !src.is_file() {
+            return Err(AppError::NotFound(format!("文件不存在：{source_path}")));
+        }
+        let meta = std::fs::metadata(src)?;
+        if meta.len() > 500 * 1024 * 1024 {
+            return Err(AppError::Validation("文件超过 500MB 限制".into()));
+        }
+        let raw_name = src
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("material")
+            .to_string();
+        let safe: String = raw_name
+            .chars()
+            .map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' })
+            .collect();
+        let kind = Self::material_kind(&raw_name);
+        let id = new_uuid_v7();
+        let rel = format!("workspace/jobs/{job_id}/interviews/materials/{id}__{safe}");
+        let dest = self.layout.resolve(&rel)?;
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(src, &dest)?;
+        let now = now_rfc3339();
+        sqlx::query(
+            "INSERT INTO interview_materials (id, job_id, round_id, kind, file_name, relative_path, size_bytes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(job_id)
+        .bind(&round_id)
+        .bind(kind)
+        .bind(&raw_name)
+        .bind(&rel)
+        .bind(meta.len() as i64)
+        .bind(&now)
+        .execute(&*self.db)
+        .await?;
+        self.get_interview_material(&id).await
+    }
+
+    async fn get_interview_material(&self, id: &str) -> AppResult<InterviewMaterial> {
+        use sqlx::Row;
+        let row = sqlx::query("SELECT * FROM interview_materials WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&*self.db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("材料不存在".into()))?;
+        Ok(Self::row_to_material(&row))
+    }
+
+    fn row_to_material(row: &sqlx::sqlite::SqliteRow) -> InterviewMaterial {
+        use sqlx::Row;
+        InterviewMaterial {
+            id: row.get("id"),
+            job_id: row.get("job_id"),
+            round_id: row.get("round_id"),
+            kind: row.get("kind"),
+            file_name: row.get("file_name"),
+            relative_path: row.get("relative_path"),
+            size_bytes: row.get("size_bytes"),
+            created_at: row.get("created_at"),
+        }
+    }
+
+    pub async fn list_interview_materials(&self, job_id: &str) -> AppResult<Vec<InterviewMaterial>> {
+        let rows = sqlx::query(
+            "SELECT * FROM interview_materials WHERE job_id = ? ORDER BY created_at DESC",
+        )
+        .bind(job_id)
+        .fetch_all(&*self.db)
+        .await?;
+        Ok(rows.iter().map(Self::row_to_material).collect())
+    }
+
+    pub async fn delete_interview_material(&self, id: &str) -> AppResult<()> {
+        let m = self.get_interview_material(id).await?;
+        sqlx::query("DELETE FROM interview_materials WHERE id = ?")
+            .bind(id)
+            .execute(&*self.db)
+            .await?;
+        if let Ok(abs) = self.layout.resolve(&m.relative_path) {
+            let _ = std::fs::remove_file(abs);
+        }
+        Ok(())
+    }
+
+    /// 文本材料预览（仅 md/txt，≤2MB）。
+    pub async fn read_material_text(&self, id: &str) -> AppResult<String> {
+        use sqlx::Row;
+        let row = sqlx::query("SELECT relative_path, kind, size_bytes FROM interview_materials WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&*self.db)
+            .await?
+            .ok_or_else(|| AppError::NotFound("材料不存在".into()))?;
+        let rel: String = row.get("relative_path");
+        let kind: String = row.get("kind");
+        let size: i64 = row.get("size_bytes");
+        if kind != "doc" {
+            return Err(AppError::Validation("仅文档类材料支持文本预览".into()));
+        }
+        if size > 2 * 1024 * 1024 {
+            return Err(AppError::Validation("文件超过 2MB，不支持在线预览".into()));
+        }
+        let abs = self.layout.resolve(&rel)?;
+        Ok(std::fs::read_to_string(abs)?)
     }
 
     // ---- 看板指标 ----

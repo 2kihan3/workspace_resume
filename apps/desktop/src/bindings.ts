@@ -397,6 +397,22 @@ async cancelRun(id: string) : Promise<Result<null, SerializedError>> {
     else return { status: "error", error: e  as any };
 }
 },
+async readRunOutput(runId: string, name: string) : Promise<Result<string, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_run_output", { runId, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async confirmTailoringImport(runId: string) : Promise<Result<Resume, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("confirm_tailoring_import", { runId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async listRuns(jobId: string | null) : Promise<Result<AIRun[], SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("list_runs", { jobId }) };

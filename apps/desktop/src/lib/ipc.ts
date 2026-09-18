@@ -117,6 +117,17 @@ export interface LoginStartResult {
 export type { LayoutConfig, LayoutBlock } from "@jsw/markdown-resume";
 import type { LayoutConfig } from "@jsw/markdown-resume";
 
+export interface InterviewMaterial {
+  id: string;
+  job_id: string;
+  round_id: string | null;
+  kind: "audio" | "doc" | "other";
+  file_name: string;
+  relative_path: string;
+  size_bytes: number;
+  created_at: string;
+}
+
 export interface RunOutput {
   name: string;
   content: string;
@@ -153,6 +164,13 @@ export const api = {
   listInterviews: (id: string) => invoke<InterviewRound[]>("list_interviews", { id }),
   reorderInterview: (id: string, interviewId: string, newSequence: number) =>
     invoke<void>("reorder_interview", { id, interviewId, newSequence }),
+  addInterviewMaterial: (jobId: string, roundId: string | null, path: string) =>
+    invoke<InterviewMaterial>("add_interview_material", { jobId, roundId, path }),
+  listInterviewMaterials: (jobId: string) =>
+    invoke<InterviewMaterial[]>("list_interview_materials", { jobId }),
+  deleteInterviewMaterial: (id: string) =>
+    invoke<void>("delete_interview_material", { id }),
+  readMaterialText: (id: string) => invoke<string>("read_material_text", { id }),
   dashboardMetrics: () => invoke<DashboardMetrics>("dashboard_metrics"),
 
   // resumes

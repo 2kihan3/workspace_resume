@@ -169,3 +169,15 @@ pub struct Artifact {
 pub fn parse_rfc3339(s: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(s).ok().map(|d| d.with_timezone(&Utc))
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct InterviewMaterial {
+    pub id: String,
+    pub job_id: String,
+    pub round_id: Option<String>,
+    pub kind: String,
+    pub file_name: String,
+    pub relative_path: String,
+    pub size_bytes: i64,
+    pub created_at: String,
+}
