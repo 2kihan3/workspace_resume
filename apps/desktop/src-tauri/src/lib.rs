@@ -69,6 +69,7 @@ pub fn run() {
         commands::confirm_tailoring_import,
         commands::list_runs,
         commands::read_job_artifacts,
+        commands::read_job_reviews,
         commands::list_artifacts,
         commands::create_backup,
         commands::restore_backup,

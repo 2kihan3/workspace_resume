@@ -48,10 +48,11 @@ fn copy_tree(src: &Path, dest: &Path) -> Result<(), std::io::Error> {
 }
 
 /// 应用内置 Skill 名称（禁止覆盖删除）。
-pub const BUILTIN_SKILL_NAMES: [&str; 3] = [
+pub const BUILTIN_SKILL_NAMES: [&str; 4] = [
     "jd-analyst",
     "company-researcher",
     "resume-tailor",
+    "interview-reviewer",
 ];
 
 const MAX_SKILL_FILES: usize = 200;

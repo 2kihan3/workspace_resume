@@ -745,8 +745,26 @@ function InterviewMaterials({ jobId, rounds }: { jobId: string; rounds: Intervie
     queryKey: ["interview-materials", jobId],
     queryFn: () => api.listInterviewMaterials(jobId),
   });
+  const reviews = useQuery({
+    queryKey: ["job-reviews", jobId],
+    queryFn: () => api.readJobReviews(jobId),
+  });
   const [roundSel, setRoundSel] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [preview, setPreview] = useState<{ name: string; text: string } | null>(null);
+  const enqueueReview = useMutation({
+    mutationFn: () =>
+      api.enqueueRun({
+        run_type: "interview_review",
+        job_id: jobId,
+        material_ids: [...selectedIds],
+      }),
+    onSuccess: () => {
+      toast.success("面试复盘任务已入队（音频转写可能较久，别关应用）");
+      qc.invalidateQueries({ queryKey: ["runs", jobId] });
+    },
+    onError: (e) => toast.error((e as Error).message),
+  });
 
   const upload = async () => {
     const files = await openFileDialog({
@@ -792,6 +810,17 @@ function InterviewMaterials({ jobId, rounds }: { jobId: string; rounds: Intervie
           const round = rounds.find((r) => r.id === m.round_id);
           return (
             <div key={m.id} className="flex items-center gap-3 rounded-lg bg-muted/50 p-3 text-sm">
+              <input
+                type="checkbox"
+                aria-label={`选择材料 ${m.file_name}`}
+                checked={selectedIds.has(m.id)}
+                onChange={(e) => {
+                  const next = new Set(selectedIds);
+                  if (e.target.checked) next.add(m.id); else next.delete(m.id);
+                  setSelectedIds(next);
+                }}
+                className="size-4 shrink-0"
+              />
               {m.kind === "audio" ? <FileAudio className="size-4 shrink-0 text-primary" aria-hidden />
                 : m.kind === "doc" ? <FileText className="size-4 shrink-0 text-primary" aria-hidden />
                 : <FileIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
@@ -830,21 +859,41 @@ function InterviewMaterials({ jobId, rounds }: { jobId: string; rounds: Intervie
         )}
       </div>
 
-      {/* AI 复盘预留位：Skill 由用户单独开发后接线 */}
-      <div className="mt-4 rounded-lg border border-dashed border-primary/40 bg-accent/40 p-4">
+      {/* AI 面试复盘（interview-reviewer Skill） */}
+      <div className="mt-4 rounded-lg border border-primary/40 bg-accent/40 p-4">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-sm font-medium">AI 面试复盘</div>
             <p className="text-xs text-muted-foreground">
-              基于轮次记录与上述材料生成复盘（问题清单/回答评估/改进建议）。
-              入口已预留，等待面试复盘 Skill（用户自研）接入后启用。
+              勾选上方材料后开始：还原面试、逐题评估、六维打分、通过预判、感谢信草稿。
+              音频会在本机就地转写（可能需要几分钟）。
             </p>
           </div>
-          <Button size="sm" disabled title="面试复盘 Skill 开发中">
-            开始复盘（即将上线）
+          <Button
+            size="sm"
+            disabled={selectedIds.size === 0 || enqueueReview.isPending}
+            title={selectedIds.size === 0 ? "先勾选至少一个材料" : ""}
+            onClick={() => enqueueReview.mutate()}
+          >
+            开始复盘（已选 {selectedIds.size}）
           </Button>
         </div>
       </div>
+
+      {/* 历史复盘产物 */}
+      {(reviews.data ?? []).length > 0 && (
+        <div className="mt-3 flex flex-col gap-2">
+          <div className="text-sm font-medium">复盘产物</div>
+          {(reviews.data ?? []).map((f) => (
+            <div key={f.name} className="flex items-center justify-between gap-2 rounded-lg bg-muted/50 p-2 text-sm">
+              <span className="min-w-0 truncate">{f.name}</span>
+              <Button size="sm" variant="ghost" onClick={() => setPreview({ name: f.name, text: f.content })}>
+                查看
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <Dialog open={!!preview} onOpenChange={() => setPreview(null)} ariaLabel="材料预览" className="max-w-3xl">
         <DialogHeader>
@@ -922,7 +971,10 @@ function AIRunsTab({ jobId }: { jobId: string }) {
   const runs = useQuery({ queryKey: ["runs", jobId], queryFn: () => api.listRuns(jobId) });
 
   const runType = (t: string) =>
-    t === "job_analysis" ? "JD 分析" : t === "company_research" ? "公司调研" : "简历优化";
+    t === "job_analysis" ? "JD 分析"
+      : t === "company_research" ? "公司调研"
+      : t === "interview_review" ? "面试复盘"
+      : "简历优化";
   const runStatus = (s: string) =>
     ({ queued: "排队中", running: "运行中", waiting_approval: "等待授权", succeeded: "已完成", failed: "失败", cancelled: "已取消" }[s] ?? s);
 

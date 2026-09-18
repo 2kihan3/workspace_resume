@@ -178,6 +178,6 @@ pub struct InterviewMaterial {
     pub kind: String,
     pub file_name: String,
     pub relative_path: String,
-    pub size_bytes: i64,
+    pub size_bytes: i32,
     pub created_at: String,
 }

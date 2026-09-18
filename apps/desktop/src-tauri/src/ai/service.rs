@@ -21,6 +21,7 @@ pub enum AIRunType {
     JobAnalysis,
     CompanyResearch,
     ResumeTailoring,
+    InterviewReview,
 }
 
 impl AIRunType {
@@ -29,6 +30,7 @@ impl AIRunType {
             AIRunType::JobAnalysis => "job_analysis",
             AIRunType::CompanyResearch => "company_research",
             AIRunType::ResumeTailoring => "resume_tailoring",
+            AIRunType::InterviewReview => "interview_review",
         }
     }
 
@@ -37,6 +39,7 @@ impl AIRunType {
             AIRunType::JobAnalysis => "jd-analyst",
             AIRunType::CompanyResearch => "company-researcher",
             AIRunType::ResumeTailoring => "resume-tailor",
+            AIRunType::InterviewReview => "interview-reviewer",
         }
     }
 
@@ -57,6 +60,8 @@ pub struct EnqueueAIRunInput {
     pub resume_id: Option<String>,
     /// JD 分析匹配档：传入基础简历 id 即叠加匹配（只读对照）
     pub match_resume_id: Option<String>,
+    /// 面试复盘：选中的面经材料 id 列表
+    pub material_ids: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Type, Clone)]
@@ -158,6 +163,94 @@ impl AIService {
                     "sha256": sha256_hex(resume.markdown.as_bytes()),
                 }));
             }
+        }
+        if input.run_type == AIRunType::InterviewReview {
+            // 面经材料 + 轮次背景 + 元信息 + 上游产物（可选）
+            let job = crate::application::job_service::JobService::new(
+                self.db.clone(),
+                self.layout.clone(),
+            )
+            .get_job(&input.job_id)
+            .await?;
+            let round_opt = input
+                .match_resume_id
+                .as_deref()
+                .and_then(|_| None::<()>);
+            let _ = round_opt;
+            let material_ids = input.material_ids.clone().unwrap_or_default();
+            if material_ids.is_empty() {
+                return Err(AppError::Validation("请至少选择一个面经材料".into()));
+            }
+            use sqlx::Row;
+            let rows = sqlx::query(
+                "SELECT id, file_name, relative_path, kind FROM interview_materials WHERE job_id = ?",
+            )
+            .bind(&input.job_id)
+            .fetch_all(&*self.db)
+            .await?;
+            let mut audio_any = false;
+            for mid in &material_ids {
+                let row = rows
+                    .iter()
+                    .find(|r| r.get::<String, _>("id") == *mid)
+                    .ok_or_else(|| AppError::Validation(format!("材料不存在：{mid}")))?;
+                let rel: String = row.get("relative_path");
+                let name: String = row.get("file_name");
+                let kind: String = row.get("kind");
+                if kind == "audio" {
+                    audio_any = true;
+                }
+                let src = self.layout.resolve(&rel)?;
+                let bytes = std::fs::read(&src).map_err(|e| AppError::Validation(format!("读取材料失败：{e}")))?;
+                atomic_write(&run_dir.join("inputs/materials").join(&name), &bytes)?;
+                manifest_inputs.push(json!({
+                    "file": format!("inputs/materials/{name}"),
+                    "sha256": sha256_hex(&bytes),
+                }));
+            }
+            // 轮次背景
+            let rounds = crate::application::job_service::JobService::new(
+                self.db.clone(),
+                self.layout.clone(),
+            )
+            .list_interviews(&input.job_id)
+            .await?;
+            let rounds_json = serde_json::to_string(&rounds)?;
+            atomic_write(&run_dir.join("inputs/rounds.json"), rounds_json.as_bytes())?;
+            manifest_inputs.push(json!({
+                "file": "inputs/rounds.json",
+                "sha256": sha256_hex(rounds_json.as_bytes()),
+            }));
+            // 元信息
+            let meta = json!({
+                "company": job.company_name,
+                "position": job.role_title,
+                "round": rounds
+                    .iter()
+                    .max_by_key(|r| r.sequence)
+                    .map(|r| format!("第{}轮·{}", r.sequence, r.name)),
+            });
+            let meta_str = serde_json::to_string(&meta)?;
+            atomic_write(&run_dir.join("inputs/meta.json"), meta_str.as_bytes())?;
+            manifest_inputs.push(json!({
+                "file": "inputs/meta.json",
+                "sha256": sha256_hex(meta_str.as_bytes()),
+            }));
+            // 上游产物（可选）
+            for up in ["jd-analysis.json", "tailoring-report.json"] {
+                let rel = format!("workspace/jobs/{}/analysis/{up}", input.job_id);
+                if let Ok(abs) = self.layout.resolve(&rel) {
+                    if abs.is_file() {
+                        let bytes = std::fs::read(&abs)?;
+                        atomic_write(&run_dir.join("inputs").join(up), &bytes)?;
+                        manifest_inputs.push(json!({
+                            "file": format!("inputs/{up}"),
+                            "sha256": sha256_hex(&bytes),
+                        }));
+                    }
+                }
+            }
+            let _ = audio_any;
         }
         if input.run_type == AIRunType::ResumeTailoring {
             let resume_id = input.resume_id.clone().ok_or_else(|| {
@@ -575,6 +668,11 @@ impl AIService {
                 ("resume-tailored.md", |b| !b.is_empty()),
                 ("tailoring-report.json", |b| serde_json::from_slice::<serde_json::Value>(b).is_ok()),
             ],
+            AIRunType::InterviewReview => vec![
+                ("interview-review.json", |b| serde_json::from_slice::<serde_json::Value>(b).is_ok()),
+                ("interview-review.md", |b| !b.is_empty()),
+                ("follow-up-email.md", |b| !b.is_empty()),
+            ],
         };
 
         let mut staged: Vec<(String, PathBuf, String)> = vec![];
@@ -597,6 +695,28 @@ impl AIService {
             }
             atomic_write(&pending_path, &bytes)?;
             staged.push((name.to_string(), pending_path, sha256_hex(&bytes)));
+        }
+
+        // 可选产物：音频逐字稿（存在即入库）
+        let optional_files = match run_type {
+            AIRunType::InterviewReview => vec![
+                ("interview-transcript.md", "interview-transcript"),
+            ],
+            _ => vec![],
+        };
+        for (name, kind) in &optional_files {
+            let path = outputs.join(name);
+            if path.is_file() {
+                if let Ok(bytes) = std::fs::read(&path) {
+                    let pending = self.pending_output_path(run_type, run, name)?;
+                    if let Some(parent) = pending.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    atomic_write(&pending, &bytes)?;
+                    staged.push((name.to_string(), pending, sha256_hex(&bytes)));
+                    let _ = kind;
+                }
+            }
         }
 
         // 数据库事务
@@ -650,6 +770,9 @@ impl AIService {
                         .execute(&mut *tx)
                         .await?;
                     }
+                }
+                AIRunType::InterviewReview => {
+                    // 复盘是信息型产物：只登记 artifact，不推进岗位状态
                 }
                 AIRunType::ResumeTailoring => {
                     // spec §10.7：unsupportedClaims 非空不得自动入库；为空则创建
@@ -810,6 +933,14 @@ impl AIService {
                     run.job_id.clone().unwrap_or_default()
                 ))?)
             }
+            AIRunType::InterviewReview => Ok(self.layout.resolve(&format!(
+                "workspace/jobs/{}/interviews/reviews/{name}.pending",
+                run.job_id.clone().unwrap_or_default()
+            ))?),
+            AIRunType::InterviewReview => Ok(self.layout.resolve(&format!(
+                "workspace/jobs/{}/interviews/reviews/{name}.pending",
+                run.job_id.clone().unwrap_or_default()
+            ))?),
         }
     }
 
@@ -820,12 +951,17 @@ impl AIService {
         name: &str,
     ) -> AppResult<(String, String)> {
         let job_id = run.job_id.clone().unwrap_or_default();
-        let rel = format!("workspace/jobs/{job_id}/analysis/{name}");
         let kind = match run_type {
             AIRunType::JobAnalysis => "jd-analysis",
             AIRunType::CompanyResearch => "company-research",
             AIRunType::ResumeTailoring => "tailoring-output",
+            AIRunType::InterviewReview => "interview-review",
         };
+        let dir = match run_type {
+            AIRunType::InterviewReview => "interviews/reviews",
+            _ => "analysis",
+        };
+        let rel = format!("workspace/jobs/{job_id}/{dir}/{name}");
         Ok((kind.to_string(), rel))
     }
 }
@@ -917,6 +1053,9 @@ fn build_prompt(run_type: AIRunType) -> String {
         ),
         AIRunType::CompanyResearch => format!(
             "使用 ${skill}。\n读取 ./inputs/job.json 和 ./inputs/jd.md。\n联网调研一律直接使用内置 web_search 工具完成；不要使用浏览器自动化、不要走 web-access 前置检查流程、不要等待任何人工确认或用户回复。\n撰写公司调研报告写入 ./outputs/company-research.md，来源清单写入 ./outputs/company-sources.json。\n不要修改 inputs，不要写入其他目录。"
+        ),
+        AIRunType::InterviewReview => format!(
+            "使用 ${skill}，执行面试复盘。\n无人值守一次性直出：不向用户提问、不等待回复；输入不足按降级规则产出并标注警示。\n读取 ./inputs/meta.json（公司/岗位/轮次）、./inputs/rounds.json（轮次背景）、./inputs/materials/ 下全部面试材料（音频先就地转写）；若 ./inputs/jd-analysis.json 与 ./inputs/tailoring-report.json 存在则执行上游对账；规则库在 ./references/。\n产出 ./outputs/interview-review.json、./outputs/interview-review.md、./outputs/follow-up-email.md；输入含音频且转写成功时另落 ./outputs/interview-transcript.md。\n不要修改 inputs，不要写入其他目录。"
         ),
         AIRunType::ResumeTailoring => format!(
             "使用 ${skill}，执行简历定制施工。\n读取 ./inputs/base-resume.md（施工基准）、./inputs/jd.md 和 ./inputs/jd-analysis.json（jd-analyst 产物），规则库在 ./references/。\n按 Skill 契约产出 ./outputs/resume-tailored.md（结构继承基础简历）与 ./outputs/tailoring-report.json（施工清单/Before-After/claim 状态表/自检/投递锦囊）。\n无人值守：不向用户提问；素材缺口用占位符并登记 claim，绝不编造。\n不要修改 inputs，不要写入其他目录。"

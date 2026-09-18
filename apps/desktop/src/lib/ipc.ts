@@ -91,11 +91,13 @@ export interface SkillInfo {
 }
 
 export interface AIRunInput {
-  run_type: "job_analysis" | "company_research" | "resume_tailoring";
+  run_type: "job_analysis" | "company_research" | "resume_tailoring" | "interview_review";
   job_id: string;
   resume_id?: string | null;
   /** JD 分析匹配档：基础简历 id（不传 = 纯深解） */
   match_resume_id?: string | null;
+  /** 面试复盘：选中的面经材料 id */
+  material_ids?: string[];
 }
 
 export interface AIServiceStatus {
@@ -231,6 +233,7 @@ export const api = {
     invoke<Resume>("confirm_tailoring_import", { runId }),
   listRuns: (jobId?: string | null) => invoke<AIRun[]>("list_runs", { jobId }),
   readJobArtifacts: (jobId: string) => invoke<RunOutput[]>("read_job_artifacts", { jobId }),
+  readJobReviews: (jobId: string) => invoke<RunOutput[]>("read_job_reviews", { jobId }),
   listArtifacts: (jobId: string) => invoke<Artifact[]>("list_artifacts", { jobId }),
 
   // backup / app

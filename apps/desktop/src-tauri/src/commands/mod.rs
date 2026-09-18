@@ -147,6 +147,26 @@ pub async fn delete_interview_material(state: State<'_, AppState>, id: String) -
     Ok(job_service(&state).delete_interview_material(&id).await?)
 }
 
+/// 读取岗位的面试复盘产物（interviews/reviews/ 下已入库文件）。
+#[tauri::command]
+#[specta::specta]
+pub async fn read_job_reviews(state: State<'_, AppState>, job_id: String) -> Result<Vec<RunOutput>, SerializedError> {
+    let dir_rel = format!("workspace/jobs/{job_id}/interviews/reviews");
+    let dir = state.layout.resolve(&dir_rel)?;
+    let mut out = vec![];
+    if dir.exists() {
+        for f in std::fs::read_dir(&dir)?.filter_map(|e| e.ok()) {
+            let name = f.file_name().to_string_lossy().to_string();
+            if name.ends_with(".pending") || name.starts_with('.') {
+                continue;
+            }
+            let content = std::fs::read_to_string(f.path()).unwrap_or_default();
+            out.push(RunOutput { name, content });
+        }
+    }
+    Ok(out)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn read_material_text(state: State<'_, AppState>, id: String) -> Result<String, SerializedError> {

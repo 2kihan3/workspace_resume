@@ -813,7 +813,7 @@ impl JobService {
         .bind(kind)
         .bind(&raw_name)
         .bind(&rel)
-        .bind(meta.len() as i64)
+        .bind(meta.len() as i32)
         .bind(&now)
         .execute(&*self.db)
         .await?;
