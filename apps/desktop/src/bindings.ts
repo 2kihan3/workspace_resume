@@ -133,6 +133,38 @@ async reorderInterview(id: string, interviewId: string, newSequence: number) : P
     else return { status: "error", error: e  as any };
 }
 },
+async addInterviewMaterial(jobId: string, roundId: string | null, path: string) : Promise<Result<InterviewMaterial, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_interview_material", { jobId, roundId, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listInterviewMaterials(jobId: string) : Promise<Result<InterviewMaterial[], SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_interview_materials", { jobId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteInterviewMaterial(id: string) : Promise<Result<null, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_interview_material", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async readMaterialText(id: string) : Promise<Result<string, SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_material_text", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async dashboardMetrics() : Promise<Result<DashboardMetrics, SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("dashboard_metrics") };
@@ -432,6 +464,17 @@ async readJobArtifacts(jobId: string) : Promise<Result<RunOutput[], SerializedEr
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * 读取岗位的面试复盘产物（interviews/reviews/ 下已入库文件）。
+ */
+async readJobReviews(jobId: string) : Promise<Result<RunOutput[], SerializedError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_job_reviews", { jobId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async listArtifacts(jobId: string) : Promise<Result<Artifact[], SerializedError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("list_artifacts", { jobId }) };
@@ -497,7 +540,7 @@ async runRecoveryScan() : Promise<Result<[number, number], SerializedError>> {
 /** user-defined types **/
 
 export type AIRun = { id: string; job_id: string | null; resume_id: string | null; run_type: string; status: string; thread_id: string | null; model: string | null; skill_snapshot_json: string; input_manifest_json: string; output_manifest_json: string | null; workdir_path: string; error_code: string | null; error_message: string | null; queued_at: string; started_at: string | null; finished_at: string | null }
-export type AIRunType = "job_analysis" | "company_research" | "resume_tailoring"
+export type AIRunType = "job_analysis" | "company_research" | "resume_tailoring" | "interview_review"
 export type AIServiceStatus = { codex_path: string | null; codex_version: string | null; app_server_state: string; logged_in: boolean | null; account_email: string | null; plan_type: string | null }
 export type Actor = "user" | "system" | "ai"
 export type AddApplicationInput = { applied_at: string; channel: string; notes: string }
@@ -512,7 +555,12 @@ export type EnqueueAIRunInput = { run_type: AIRunType; job_id: string; resume_id
 /**
  * JD 分析匹配档：传入基础简历 id 即叠加匹配（只读对照）
  */
-match_resume_id: string | null }
+match_resume_id: string | null; 
+/**
+ * 面试复盘：选中的面经材料 id 列表
+ */
+material_ids: string[] | null }
+export type InterviewMaterial = { id: string; job_id: string; round_id: string | null; kind: string; file_name: string; relative_path: string; size_bytes: number; created_at: string }
 export type InterviewRound = { id: string; job_id: string; sequence: number; name: string; status: string; scheduled_at: string | null; format: string | null; interviewer: string | null; notes: string; result: string | null; created_at: string; updated_at: string }
 export type Job = { id: string; company_name: string; role_title: string; status: JobStatus; 
 /**

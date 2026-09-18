@@ -288,7 +288,7 @@ impl AIService {
                 .join(input.run_type.skill_name())
                 .join(dir);
             if src.is_dir() {
-                copy_schema_files(&src, &run_dir, &mut manifest_inputs)?;
+                copy_support_files(&src, &run_dir.join(dir), &mut manifest_inputs)?;
             }
         }
 
@@ -574,6 +574,7 @@ impl AIService {
         let run_type = match run.run_type.as_str() {
             "job_analysis" => AIRunType::JobAnalysis,
             "company_research" => AIRunType::CompanyResearch,
+            "interview_review" => AIRunType::InterviewReview,
             _ => AIRunType::ResumeTailoring,
         };
 
@@ -1017,27 +1018,31 @@ pub fn strip_empty_section_headings(md: &str) -> String {
     out
 }
 
-/// 递归复制 Skill schemas 到 Run 根（保持相对路径），并登记 manifest。
-fn copy_schema_files(
+/// 递归复制 Skill 支撑目录（schemas/references）到 Run 对应目录，并登记 manifest。
+fn copy_support_files(
     src: &std::path::Path,
-    run_dir: &std::path::Path,
+    dest_dir: &std::path::Path,
     manifest: &mut Vec<serde_json::Value>,
 ) -> AppResult<()> {
+    let prefix = dest_dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("schemas");
     for entry in std::fs::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();
         let rel = path.strip_prefix(src).unwrap_or(&path);
         if path.is_dir() {
-            copy_schema_files(&path, run_dir, manifest)?;
+            copy_support_files(&path, &dest_dir.join(rel), manifest)?;
         } else {
-            let dest = run_dir.join("schemas").join(rel);
+            let dest = dest_dir.join(rel);
             if let Some(parent) = dest.parent() {
                 std::fs::create_dir_all(parent)?;
             }
             let bytes = std::fs::read(&path)?;
             crate::infrastructure::file_repo::atomic_write(&dest, &bytes)?;
             manifest.push(json!({
-                "file": format!("schemas/{}", rel.display()),
+                "file": format!("{}/{}", prefix, rel.display()),
                 "sha256": sha256_hex(&bytes),
             }));
         }
