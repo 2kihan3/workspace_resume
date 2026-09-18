@@ -480,7 +480,7 @@ impl AIService {
                 ("company-sources.json", |b| serde_json::from_slice::<serde_json::Value>(b).is_ok()),
             ],
             AIRunType::ResumeTailoring => vec![
-                ("tailored-resume.md", |b| !b.is_empty()),
+                ("resume-tailored.md", |b| !b.is_empty()),
                 ("tailoring-report.json", |b| serde_json::from_slice::<serde_json::Value>(b).is_ok()),
             ],
         };
@@ -492,7 +492,7 @@ impl AIService {
             let bytes = std::fs::read(&path).map_err(|_| {
                 AppError::AIRun(format!("AI 输出缺少必需文件 {name}"))
             })?;
-            if *name == "tailored-resume.md" {
+            if *name == "resume-tailored.md" {
                 tailored_md = Some(bytes.clone());
             }
             if !validator(&bytes) {
@@ -566,11 +566,26 @@ impl AIService {
                         .ok()
                         .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
                         .unwrap_or(json!({}));
+                    // 新版报告用 claim 状态表：待确认/缺失阻塞 阻止自动入库
                     let unsupported: Vec<String> = report
-                        .get("unsupportedClaims")
+                        .get("claims")
                         .and_then(|c| c.as_array())
                         .map(|arr| {
-                            arr.iter().filter_map(|x| x.as_str().map(String::from)).collect()
+                            arr.iter()
+                                .filter(|x| {
+                                    matches!(
+                                        x.get("status").and_then(|s| s.as_str()),
+                                        Some("待确认") | Some("缺失阻塞")
+                                    )
+                                })
+                                .map(|x| {
+                                    format!(
+                                        "{}：{}",
+                                        x.get("status").and_then(|s| s.as_str()).unwrap_or("?"),
+                                        x.get("statement").and_then(|s| s.as_str()).unwrap_or("")
+                                    )
+                                })
+                                .collect()
                         })
                         .unwrap_or_default();
                     if unsupported.is_empty() {
@@ -787,7 +802,7 @@ fn build_prompt(run_type: AIRunType) -> String {
             "使用 ${skill}。\n读取 ./inputs/job.json 和 ./inputs/jd.md。\n联网调研一律直接使用内置 web_search 工具完成；不要使用浏览器自动化、不要走 web-access 前置检查流程、不要等待任何人工确认或用户回复。\n撰写公司调研报告写入 ./outputs/company-research.md，来源清单写入 ./outputs/company-sources.json。\n不要修改 inputs，不要写入其他目录。"
         ),
         AIRunType::ResumeTailoring => format!(
-            "使用 ${skill}。\n读取 ./inputs/base-resume.md、./inputs/jd.md 和 ./inputs/jd-analysis.json。\n生成完整岗位版简历写入 ./outputs/tailored-resume.md，改写报告写入 ./outputs/tailoring-report.json。\n不得新增候选人未提供的事实；不要修改 inputs，不要写入其他目录。"
+            "使用 ${skill}，执行简历定制施工。\n读取 ./inputs/base-resume.md（施工基准）、./inputs/jd.md 和 ./inputs/jd-analysis.json（jd-analyst 产物），规则库在 ./references/。\n按 Skill 契约产出 ./outputs/resume-tailored.md（结构继承基础简历）与 ./outputs/tailoring-report.json（施工清单/Before-After/claim 状态表/自检/投递锦囊）。\n无人值守：不向用户提问；素材缺口用占位符并登记 claim，绝不编造。\n不要修改 inputs，不要写入其他目录。"
         ),
     }
 }
